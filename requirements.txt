@@ -3,4 +3,4 @@ pandas
 requests
 python-dotenv
 openai
-supabase-py
+supabase-py==2.4.0 
