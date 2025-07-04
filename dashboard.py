@@ -41,8 +41,37 @@ ENABLE_EMAIL_SENDING = all([email_host, email_port, email_address, email_passwor
 if not ENABLE_EMAIL_SENDING:
     st.warning("Email credentials not fully configured. Email sending will be disabled.")
 
-# --- Backend API URL ---
+# --- Backend API URL (No longer strictly needed for vehicle data, but kept for other potential calls) ---
 BACKEND_API_URL = "https://aoe-agentic-demo.onrender.com" # Your deployed backend URL
+
+# --- Hardcoded Vehicle Data (Copied from main.py) ---
+AOE_VEHICLE_DATA = {
+    "AOE Apex": {
+        "type": "Luxury Sedan",
+        "powertrain": "Gasoline",
+        "features": "Premium leather interior, Advanced driver-assistance systems (ADAS), Panoramic sunroof, Bose premium sound system, Adaptive cruise control, Lane-keeping assist, Automated parking, Heated and ventilated seats."
+    },
+    "AOE Volt": {
+        "type": "Electric Compact",
+        "powertrain": "Electric",
+        "features": "Long-range battery (500 miles), Fast charging (80% in 20 min), Regenerative braking, Solar roof charging, Vehicle-to-Grid (V2G) capability, Digital cockpit, Over-the-air updates, Extensive charging network access."
+    },
+    "AOE Thunder": {
+        "type": "Performance SUV",
+        "powertrain": "Gasoline",
+        "features": "V8 Twin-Turbo Engine, Adjustable air suspension, Sport Chrono Package, High-performance braking system, Off-road capabilities, Torque vectoring, 360-degree camera, Ambient lighting, Customizable drive modes."
+    },
+    "AOE Aero": {
+        "type": "Hybrid Crossover",
+        "powertrain": "Hybrid",
+        "features": "Fuel-efficient hybrid system, All-wheel drive, Spacious cargo, Infotainment with large touchscreen, Wireless charging, Hands-free power liftgate, Remote start, Apple CarPlay/Android Auto."
+    },
+    "AOE Stellar": {
+        "type": "Electric Pickup Truck",
+        "powertrain": "Electric",
+        "features": "Quad-motor AWD, 0-60 mph in 3 seconds, 10,000 lbs towing capacity, Frunk (front trunk) storage, Integrated air compressor, Worksite power outlets, Customizable bed configurations, Off-road driving modes."
+    }
+}
 
 # --- Dashboard Title ---
 st.set_page_config(page_title="AOE Motors Test Drive Dashboard", layout="wide")
@@ -59,15 +88,17 @@ def fetch_bookings_data(location_filter=None, start_date_filter=None, end_date_f
     """Fetches all booking data from Supabase, with optional filters."""
     try:
         query = supabase.from_(SUPABASE_TABLE_NAME).select(
-            "request_id, full_name, email, vehicle, booking_date, current_vehicle, location, time_frame, action_status, sales_notes, lead_score"
-        ).order('booking_date', desc=True)
+            "request_id, full_name, email, vehicle, booking_date, current_vehicle, location, time_frame, action_status, sales_notes, lead_score, booking_timestamp" # Added booking_timestamp
+        ).order('booking_timestamp', desc=True) # Changed order to booking_timestamp
 
         if location_filter and location_filter != "All Locations":
             query = query.eq('location', location_filter)
         if start_date_filter:
-            query = query.gte('booking_date', start_date_filter.isoformat())
+            # Filter by booking_timestamp
+            query = query.gte('booking_timestamp', start_date_filter.isoformat())
         if end_date_filter:
-            query = query.lte('booking_date', end_date_filter.isoformat())
+            # Filter by booking_timestamp
+            query = query.lte('booking_timestamp', end_date_filter.isoformat())
 
         response = query.execute()
 
@@ -79,26 +110,10 @@ def fetch_bookings_data(location_filter=None, start_date_filter=None, end_date_f
         st.error(f"Error fetching data from Supabase: {e}")
         return []
 
-# --- Function to Fetch Vehicle Data from Backend ---
-@st.cache_data(ttl=3600) # Cache vehicle data for 1 hour
-def fetch_vehicles_data_from_backend():
-    """
-    Fetches vehicle data from the main.py backend API.
-    This will trigger the scraping logic on the backend if needed.
-    """
-    try:
-        response = requests.get(f"{BACKEND_API_URL}/vehicles-data")
-        response.raise_for_status() # Raise an exception for HTTP errors
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        st.error(f"Error fetching vehicle data from backend: {e}")
-        # Fallback to a small hardcoded set if backend is unreachable or fails
-        st.warning("Falling back to minimal hardcoded vehicle data due to backend connectivity issue.")
-        return {
-            "AOE Apex": {"type": "Luxury Sedan", "powertrain": "Gasoline", "features": "Generic features for Apex."},
-            "AOE Thunder": {"type": "Performance SUV", "powertrain": "Gasoline", "features": "Generic features for Thunder."},
-            "AOE Volt": {"type": "Electric Compact", "powertrain": "Electric", "features": "Generic features for Volt."}
-        }
+# --- REMOVED: Function to Fetch Vehicle Data from Backend ---
+# @st.cache_data(ttl=3600)
+# def fetch_vehicles_data_from_backend():
+#    ...
 
 # --- Function to Update Data in Supabase ---
 def update_booking_field(request_id, field_name, new_value):
@@ -108,7 +123,6 @@ def update_booking_field(request_id, field_name, new_value):
         if response.data:
             st.success(f"Successfully updated {field_name} for {request_id}!")
             st.cache_data.clear() # Clear dashboard cache for immediate reflection
-            fetch_vehicles_data_from_backend.clear() # Clear vehicle data cache too, if needed for immediate reflection (unlikely)
             # No st.rerun() here, as we want to control reruns explicitly for expander state
         else:
             st.error(f"Failed to update {field_name} for {request_id}. Response: {response}")
@@ -140,6 +154,7 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
         - If "high EV cost" is mentioned: Focus on long-term savings, reduced fuel costs, potential tax credits, Vehicle-to-Grid (V2G) if applicable (Volt).
         - If "charging anxiety" is mentioned: Highlight ultra-fast charging, solar integration (Volt), extensive charging network, range.
         - If other issues are mentioned: Adapt relevant features.
+    - **When highlighting features, you can be slightly technical to demonstrate the real value proposition, using terms from the 'AOE {vehicle_name} Key Features' list where appropriate, but ensure the benefit is clear.**
     - If no specific issues are mentioned, write a general follow-up highlighting key benefits.
     - End with a call to action to schedule another call or visit to discuss further.
     - Maintain a professional, empathetic, and persuasive tone.
@@ -278,20 +293,20 @@ st.sidebar.header("Filters")
 all_locations = ["All Locations", "New York", "Los Angeles", "Chicago", "Houston", "Miami"] # Example
 selected_location = st.sidebar.selectbox("Filter by Location", all_locations)
 
-# Date Filter
+# Date Filter (now filters by booking_timestamp)
 col1, col2 = st.sidebar.columns(2)
 with col1:
-    start_date = st.date_input("Start Date", value=datetime.today().date() - pd.Timedelta(days=30))
+    start_date = st.date_input("Start Date (Booking Timestamp)", value=datetime.today().date() - pd.Timedelta(days=30))
 with col2:
-    end_date = st.date_input("End Date", value=datetime.today().date())
+    end_date = st.date_input("End Date (Booking Timestamp)", value=datetime.today().date())
 
 # Fetch all data needed for the dashboard with filters
 bookings_data = fetch_bookings_data(selected_location, start_date, end_date)
-aoe_vehicles_data = fetch_vehicles_data_from_backend()
+# aoe_vehicles_data is now directly AOE_VEHICLE_DATA
 
 if bookings_data:
     df = pd.DataFrame(bookings_data)
-    df = df.sort_values(by='booking_date', ascending=False) # Ensure sorting
+    df = df.sort_values(by='booking_timestamp', ascending=False) # Ensure sorting by timestamp
 
     # UI/UX: Session state to manage expanded lead
     def set_expanded_lead(request_id):
@@ -323,7 +338,8 @@ if bookings_data:
 
             st.write(f"**Email:** {row['email']}")
             st.write(f"**Location:** {row['location']}")
-            st.write(f"**Booking Date:** {row['booking_date']}")
+            st.write(f"**Booking Date:** {row['booking_date']}") # Keeping display of booking_date
+            st.write(f"**Booking Timestamp:** {row['booking_timestamp']}") # Displaying timestamp for clarity
             st.write(f"**Current Vehicle:** {row['current_vehicle'] if row['current_vehicle'] else 'N/A'}")
             st.write(f"**Time Frame:** {row['time_frame']}")
 
@@ -414,7 +430,8 @@ if bookings_data:
 
             # Logic for drafting follow-up email (manual send)
             if selected_action == 'Follow Up Required' and 'draft_email_button' in locals() and draft_email_button and new_sales_notes.strip() != "":
-                vehicle_details = aoe_vehicles_data.get(row['vehicle'], {})
+                # Use the hardcoded AOE_VEHICLE_DATA directly
+                vehicle_details = AOE_VEHICLE_DATA.get(row['vehicle'], {})
                 if vehicle_details:
                     followup_subject, followup_body = generate_followup_email(
                         row['full_name'], row['email'], row['vehicle'], new_sales_notes, vehicle_details
@@ -428,7 +445,7 @@ if bookings_data:
                     else:
                         st.error("Failed to draft email. Please check sales notes and try again.")
                 else:
-                    st.error(f"Vehicle details for {row['vehicle']} not found. Cannot draft email.")
+                    st.error(f"Vehicle details for {row['vehicle']} not found in hardcoded data. Cannot draft email.")
 
 
             # Display drafted email if available in session state (only for Follow Up Required)
