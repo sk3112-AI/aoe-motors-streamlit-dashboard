@@ -167,21 +167,20 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
         if aoe_segment_key and aoe_segment_key in COMPETITOR_VEHICLE_DATA["Ford"]:
             ford_competitor = COMPETITOR_VEHICLE_DATA["Ford"][aoe_segment_key]
             comparison_context = f"""
-            The customer's current vehicle brand is Ford. The AOE {vehicle_name} falls into the {aoe_segment_key} segment.
+            The customer's current vehicle brand is Ford. The {vehicle_name} falls into the {aoe_segment_key} segment.
             A representative Ford model in this segment is the {ford_competitor['model_name']} with features: {ford_competitor['features']}.
             """
             # Adjust prompt for explicit comparison
             prompt_instructions = f"""
             - Start with a polite greeting.
             - Acknowledge their test drive.
-            - Crucially, directly address the customer's stated issues from the sales notes. For each issue mentioned, explain how specific features of the AOE {vehicle_name} (from the provided list) directly resolve or alleviate that concern.
-                - If "high EV cost" is mentioned: Focus on long-term savings, reduced fuel costs, potential tax credits, Vehicle-to-Grid (V2G) if applicable (Volt).
-                - If "charging anxiety" is mentioned: Highlight ultra-fast charging, solar integration (Volt), extensive charging network, range.
-                - If the sales notes indicate indecisiveness (e.g., "not sure what he wants") or loyalty to another brand, gently acknowledge this.
-                - **Given the customer's interest in Ford, compare the AOE {vehicle_name} with the representative Ford {aoe_segment_key} model ({ford_competitor['model_name']}) on 2-3 key differentiating features/specifications. Present this as a concise comparison in a TABLE format, highlighting where the AOE {vehicle_name} excels or offers a distinct advantage, using the format: "AOE {vehicle_name} vs. {ford_competitor['model_name']}".**
+            - Naturally incorporate the customer's concerns and preferences (e.g., indecisiveness, loyalty to their current brand like Ford, specific issues) directly into the email body, as if you learned them during a conversation, without explicitly stating "from our sales notes" or "from our conversation notes". Address each concern mentioned in the sales notes directly.
+                - If "high EV cost" is mentioned: Focus on long-term savings, reduced fuel costs, potential tax credits, Vehicle-to-Grid (V2G) if applicable ({vehicle_name} is Volt).
+                - If "charging anxiety" is mentioned: Highlight ultra-fast charging, solar integration ({vehicle_name} is Volt), extensive charging network, range.
                 - If other issues are mentioned: Adapt relevant features.
-            - When highlighting features, be slightly technical to demonstrate the real value proposition, using terms from the 'AOE {vehicle_name} Key Features' list where appropriate. Ensure the benefit is clear and compelling.
-            - **Do NOT use bolding (e.g., `**text**`) in the email body.**
+            - Given the customer's interest in Ford, compare the {vehicle_name} with the representative Ford {aoe_segment_key} model ({ford_competitor['model_name']}) on 2-3 key differentiating features/specifications. Present this as a concise comparison in a well-formatted markdown TABLE with proper spacing for readability, using the format: "{vehicle_name} vs. {ford_competitor['model_name']}". Highlight where the {vehicle_name} excels or offers a distinct advantage. If a specific comparison point is not available for the Ford competitor from the provided features, infer a general or typical characteristic for that type of Ford vehicle, rather than stating 'not specified' or 'may vary'.
+            - When highlighting features, be slightly technical to demonstrate the real value proposition, using terms from the '{vehicle_name} Key Features' list where appropriate. Ensure the benefit is clear and compelling.
+            - Do NOT use bolding (e.g., `**text**`) in the email body.
             - If no specific issues are mentioned, write a general follow-up highlighting key benefits.
             - End with a low-pressure call to action. Instead of demanding a call or visit, offer to provide further specific information (e.g., a detailed digital brochure, a personalized feature comparison, or answers to any specific questions via email) that they can review at their convenience, respecting their need for time and information gathering.
             - Maintain a professional, empathetic, and persuasive tone, respecting their stated communication preferences.
@@ -192,13 +191,13 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
             prompt_instructions = f"""
             - Start with a polite greeting.
             - Acknowledge their test drive.
-            - Crucially, directly address the customer's stated issues from the sales notes. For each issue mentioned, explain how specific features of the AOE {vehicle_name} (from the provided list) directly resolve or alleviate that concern.
-                - If "high EV cost" is mentioned: Focus on long-term savings, reduced fuel costs, potential tax credits, Vehicle-to-Grid (V2G) if applicable (Volt).
-                - If "charging anxiety" is mentioned: Highlight ultra-fast charging, solar integration (Volt), extensive charging network, range.
-                - If the sales notes indicate indecisiveness (e.g., "not sure what he wants") or loyalty to another brand (e.g., "looking for car in current brand"), gently acknowledge this. Position the AOE {vehicle_name} as a compelling, modern alternative by focusing on clear, concise value propositions and AOE's distinct advantages (e.g., innovation, advanced technology, future-proofing) that might appeal to someone considering traditional brands like Ford.
+            - Naturally incorporate the customer's concerns and preferences (e.g., indecisiveness, loyalty to their current brand like Ford, specific issues) directly into the email body, as if you learned them during a conversation, without explicitly stating "from our sales notes" or "from our conversation notes". Address each concern mentioned in the sales notes directly.
+                - If "high EV cost" is mentioned: Focus on long-term savings, reduced fuel costs, potential tax credits, Vehicle-to-Grid (V2G) if applicable ({vehicle_name} is Volt).
+                - If "charging anxiety" is mentioned: Highlight ultra-fast charging, solar integration ({vehicle_name} is Volt), extensive charging network, range.
                 - If other issues are mentioned: Adapt relevant features.
-            - When highlighting features, be slightly technical to demonstrate the real value proposition, using terms from the 'AOE {vehicle_name} Key Features' list where appropriate. Ensure the benefit is clear and compelling.
-            - **Do NOT use bolding (e.g., `**text**`) in the email body.**
+            - Position the {vehicle_name} as a compelling, modern alternative by focusing on clear, concise value propositions and AOE's distinct advantages (e.g., innovation, advanced technology, future-proofing) that might appeal to someone considering traditional brands like Ford.
+            - When highlighting features, be slightly technical to demonstrate the real value proposition, using terms from the '{vehicle_name} Key Features' list where appropriate. Ensure the benefit is clear and compelling.
+            - Do NOT use bolding (e.g., `**text**`) in the email body.
             - If no specific issues are mentioned, write a general follow-up highlighting key benefits.
             - End with a low-pressure call to action. Instead of demanding a call or visit, offer to provide further specific information (e.g., a detailed digital brochure, a personalized feature comparison, or answers to any specific questions via email) that they can review at their convenience, respecting their need for time and information gathering.
             - Maintain a professional, empathetic, and persuasive tone, respecting their stated communication preferences.
@@ -210,13 +209,13 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
         prompt_instructions = f"""
         - Start with a polite greeting.
         - Acknowledge their test drive.
-        - Crucially, directly address the customer's stated issues from the sales notes. For each issue mentioned, explain how specific features of the AOE {vehicle_name} (from the provided list) directly resolve or alleviate that concern.
-            - If "high EV cost" is mentioned: Focus on long-term savings, reduced fuel costs, potential tax credits, Vehicle-to-Grid (V2G) if applicable (Volt).
-            - If "charging anxiety" is mentioned: Highlight ultra-fast charging, solar integration (Volt), extensive charging network, range.
-            - If the sales notes indicate indecisiveness (e.g., "not sure what he wants") or loyalty to another brand (e.g., "looking for car in current brand"), gently acknowledge this. Position the AOE {vehicle_name} as a compelling, modern alternative by focusing on clear, concise value propositions and AOE's distinct advantages (e.g., innovation, advanced technology, future-proofing) that might appeal to someone considering traditional brands like {current_vehicle_brand}.
+        - Naturally incorporate the customer's concerns and preferences (e.g., indecisiveness, loyalty to their current brand like {current_vehicle_brand}, specific issues) directly into the email body, as if you learned them during a conversation, without explicitly stating "from our sales notes" or "from our conversation notes". Address each concern mentioned in the sales notes directly.
+            - If "high EV cost" is mentioned: Focus on long-term savings, reduced fuel costs, potential tax credits, Vehicle-to-Grid (V2G) if applicable ({vehicle_name} is Volt).
+            - If "charging anxiety" is mentioned: Highlight ultra-fast charging, solar integration ({vehicle_name} is Volt), extensive charging network, range.
             - If other issues are mentioned: Adapt relevant features.
-        - When highlighting features, be slightly technical to demonstrate the real value proposition, using terms from the 'AOE {vehicle_name} Key Features' list where appropriate. Ensure the benefit is clear and compelling.
-        - **Do NOT use bolding (e.g., `**text**`) in the email body.**
+        - Position the {vehicle_name} as a compelling, modern alternative by focusing on clear, concise value propositions and AOE's distinct advantages (e.g., innovation, advanced technology, future-proofing) that might appeal to someone considering traditional brands like {current_vehicle_brand}.
+        - When highlighting features, be slightly technical to demonstrate the real value proposition, using terms from the '{vehicle_name} Key Features' list where appropriate. Ensure the benefit is clear and compelling.
+        - Do NOT use bolding (e.g., `**text**`) in the email body.
         - If no specific issues are mentioned, write a general follow-up highlighting key benefits.
         - End with a low-pressure call to action. Instead of demanding a call or visit, offer to provide further specific information (e.g., a detailed digital brochure, a personalized feature comparison, or answers to any specific questions via email) that they can review at their convenience, respecting their need for time and information gathering.
         - Maintain a professional, empathetic, and persuasive tone, respecting their stated communication preferences.
@@ -228,13 +227,12 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
         prompt_instructions = f"""
         - Start with a polite greeting.
         - Acknowledge their test drive.
-        - Crucially, directly address the customer's stated issues from the sales notes. For each issue mentioned, explain how specific features of the AOE {vehicle_name} (from the provided list) directly resolve or alleviate that concern.
-            - If "high EV cost" is mentioned: Focus on long-term savings, reduced fuel costs, potential tax credits, Vehicle-to-Grid (V2G) if applicable (Volt).
-            - If "charging anxiety" is mentioned: Highlight ultra-fast charging, solar integration (Volt), extensive charging network, range.
-            - If the sales notes indicate indecisiveness (e.g., "not sure what he wants") or loyalty to another brand (e.g., "looking for car in current brand"), gently acknowledge this. Position the AOE {vehicle_name} as a compelling, modern alternative by focusing on clear, concise value propositions and AOE's distinct advantages (e.g., innovation, advanced technology, future-proofing).
+        - Naturally incorporate the customer's concerns and preferences (e.g., indecisiveness, specific issues) directly into the email body, as if you learned them during a conversation, without explicitly stating "from our sales notes" or "from our conversation notes". Address each concern mentioned in the sales notes directly.
+            - If "high EV cost" is mentioned: Focus on long-term savings, reduced fuel costs, potential tax credits, Vehicle-to-Grid (V2G) if applicable ({vehicle_name} is Volt).
+            - If "charging anxiety" is mentioned: Highlight ultra-fast charging, solar integration ({vehicle_name} is Volt), extensive charging network, range.
             - If other issues are mentioned: Adapt relevant features.
-        - When highlighting features, be slightly technical to demonstrate the real value proposition, using terms from the 'AOE {vehicle_name} Key Features' list where appropriate. Ensure the benefit is clear and compelling.
-        - **Do NOT use bolding (e.g., `**text**`) in the email body.**
+        - When highlighting features, be slightly technical to demonstrate the real value proposition, using terms from the '{vehicle_name} Key Features' list where appropriate. Ensure the benefit is clear and compelling.
+        - Do NOT use bolding (e.g., `**text**`) in the email body.
         - If no specific issues are mentioned, write a general follow-up highlighting key benefits.
         - End with a low-pressure call to action. Instead of demanding a call or visit, offer to provide further specific information (e.g., a detailed digital brochure, a personalized feature comparison, or answers to any specific questions via email) that they can review at their convenience, respecting their need for time and information gathering.
         - Maintain a professional, empathetic, and persuasive tone, respecting their stated communication preferences.
@@ -244,7 +242,7 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
 
     # Combine base prompt and instructions
     prompt = f"""
-    Draft a polite, helpful, and persuasive follow-up email to a customer who recently test-drove an AOE {vehicle_name}.
+    Draft a polite, helpful, and persuasive follow-up email to a customer who recently test-drove an {vehicle_name}.
 
     **Customer Information:**
     - Name: {customer_name}
@@ -252,7 +250,7 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
     - Vehicle of Interest: {vehicle_name} ({vehicle_type}, {powertrain} powertrain)
     - Customer Issues/Comments (from sales notes): "{sales_notes}"
 
-    **AOE {vehicle_name} Key Features:**
+    **{vehicle_name} Key Features:**
     - {features_str}
 
     {comparison_context} # Add comparison context here
@@ -278,7 +276,7 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
                 subject_line = parts[1].split("\n", 1)[0].strip()
                 body_content = parts[1].split("\n", 1)[1].strip()
             else:
-                subject_line = f"Following up on your AOE {vehicle_name} Test Drive"
+                subject_line = f"Following up on your {vehicle_name} Test Drive"
                 body_content = draft
             return subject_line, body_content
     except Exception as e:
@@ -288,7 +286,7 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
 # --- Function to Generate Lost Email (AI) ---
 def generate_lost_email(customer_name, vehicle_name):
     prompt = f"""
-    Draft a polite and professional email to a customer, {customer_name}, who was interested in the AOE {vehicle_name} but has decided not to proceed.
+    Draft a polite and professional email to a customer, {customer_name}, who was interested in the {vehicle_name} but has decided not to proceed.
     Thank them for their time and interest, acknowledge their decision respectfully, and invite them to consider AOE Motors again in the future.
     Maintain a positive, non-pushy, and welcoming tone.
     Output only the email content (Subject and Body), in plain text format.
@@ -321,7 +319,7 @@ def generate_lost_email(customer_name, vehicle_name):
 # --- Function to Generate Welcome Email for Converted Leads (AI) ---
 def generate_welcome_email(customer_name, vehicle_name):
     prompt = f"""
-    Draft a warm and enthusiastic welcome email to {customer_name}, who has just converted into a customer and is proceeding with the purchase of the AOE {vehicle_name}.
+    Draft a warm and enthusiastic welcome email to {customer_name}, who has just converted into a customer and is proceeding with the purchase of the {vehicle_name}.
     Welcome them to the AOE Motors family.
     Briefly outline the next steps in the sales process (e.g., paperwork, financing, delivery).
     Emphasize getting documents ready (e.g., ID, proof of address, financial documents).
