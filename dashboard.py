@@ -174,7 +174,7 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
             prompt_instructions = f"""
             - Start with a polite greeting.
             - Acknowledge their test drive.
-            - Naturally incorporate the customer's concerns and preferences (e.g., indecisiveness, loyalty to their current brand like Ford, specific issues) directly into the email body, as if you learned them during a conversation, without explicitly stating "from our sales notes" or "from our conversation notes". Address each concern mentioned in the sales notes directly.
+            - Naturally incorporate the customer's concerns and preferences (e.g., indecisiveness, specific issues) directly into the email body, as if you learned them during a conversation, without explicitly stating "from our sales notes" or "from our conversation notes". Address each concern mentioned in the sales notes directly. If the customer's current vehicle brand is Ford, acknowledge their familiarity or experience with Ford and frame the conversation as helping them weigh options to ensure the AOE Volt is an excellent fit, instead of mentioning 'loyalty'.
                 - If "high EV cost" is mentioned: Focus on long-term savings, reduced fuel costs, potential tax credits, Vehicle-to-Grid (V2G) if applicable ({vehicle_name} is Volt).
                 - If "charging anxiety" is mentioned: Highlight ultra-fast charging, solar integration ({vehicle_name} is Volt), extensive charging network, range.
                 - If other issues are mentioned: Adapt relevant features.
@@ -196,7 +196,7 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
             prompt_instructions = f"""
             - Start with a polite greeting.
             - Acknowledge their test drive.
-            - Naturally incorporate the customer's concerns and preferences (e.g., indecisiveness, loyalty to their current brand like Ford, specific issues) directly into the email body, as if you learned them during a conversation, without explicitly stating "from our sales notes" or "from our conversation notes". Address each concern mentioned in the sales notes directly.
+            - Naturally incorporate the customer's concerns and preferences (e.g., indecisiveness, specific issues) directly into the email body, as if you learned them during a conversation, without explicitly stating "from our sales notes" or "from our conversation notes". Address each concern mentioned in the sales notes directly. If the customer's current vehicle brand is Ford, acknowledge their familiarity or experience with Ford and frame the conversation as helping them weigh options to ensure the AOE Volt is an excellent fit, instead of mentioning 'loyalty'.
                 - If "high EV cost" is mentioned: Focus on long-term savings, reduced fuel costs, potential tax credits, Vehicle-to-Grid (V2G) if applicable ({vehicle_name} is Volt).
                 - If "charging anxiety" is mentioned: Highlight ultra-fast charging, solar integration ({vehicle_name} is Volt), extensive charging network, range.
                 - If other issues are mentioned: Adapt relevant features.
@@ -214,7 +214,7 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
         prompt_instructions = f"""
         - Start with a polite greeting.
         - Acknowledge their test drive.
-        - Naturally incorporate the customer's concerns and preferences (e.g., indecisiveness, loyalty to their current brand like {current_vehicle_brand}, specific issues) directly into the email body, as if you learned them during a conversation, without explicitly stating "from our sales notes" or "from our conversation notes". Address each concern mentioned in the sales notes directly.
+        - Naturally incorporate the customer's concerns and preferences (e.g., indecisiveness, specific issues) directly into the email body, as if you learned them during a conversation, without explicitly stating "from our sales notes" or "from our conversation notes". Address each concern mentioned in the sales notes directly.
             - If "high EV cost" is mentioned: Focus on long-term savings, reduced fuel costs, potential tax credits, Vehicle-to-Grid (V2G) if applicable ({vehicle_name} is Volt).
             - If "charging anxiety" is mentioned: Highlight ultra-fast charging, solar integration ({vehicle_name} is Volt), extensive charging network, range.
             - If other issues are mentioned: Adapt relevant features.
