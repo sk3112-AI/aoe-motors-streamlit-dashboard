@@ -73,6 +73,34 @@ AOE_VEHICLE_DATA = {
     }
 }
 
+# --- Hardcoded Competitor Vehicle Data (NEW) ---
+COMPETITOR_VEHICLE_DATA = {
+    "Ford": {
+        "Sedan": { # Corresponds to AOE Apex (Luxury Sedan)
+            "model_name": "Ford Sedan (e.g., Fusion/Taurus equivalent)", # Placeholder name
+            "features": "2.5L IVCT Atkinson Cycle I-4 Hybrid Engine; 210 Total System Horsepower; Dual-Zone Electronic Automatic Temperature Control; Heated Front Row Seats"
+        },
+        "SUV": { # Corresponds to AOE Thunder (Performance SUV), AOE Aero (Hybrid Crossover)
+            "model_name": "Ford SUV (e.g., Explorer/Expedition equivalent)", # Placeholder name
+            "features": "Available 440 horsepower 3.5L EcoBoost® V6 High-Output engine, Antilock Brake Systems (ABS), Front-Seat Side-Impact Airbags, SOS Post-Crash Alert System™"
+        },
+        "EV": { # Corresponds to AOE Volt (Electric Compact), AOE Stellar (Electric Pickup Truck)
+            "model_name": "Ford EV (e.g., Mustang Mach-E/F-150 Lightning equivalent)", # Placeholder name
+            "features": "260 miles of EPA-est. range* with standard-range battery and RWD, 387 lb.-ft. of torque† with standard-range battery and RWD, Premium model features (heated/ventilated front seats trimmed with ActiveX® material), SYNC® 4A, over-the-air updates"
+        }
+    }
+    # Add other brands here if you get specific data for them later
+}
+
+# Mapping AOE vehicle_type to Ford competitor segment (NEW)
+AOE_TYPE_TO_COMPETITOR_SEGMENT_MAP = {
+    "Luxury Sedan": "Sedan",
+    "Electric Compact": "EV",
+    "Performance SUV": "SUV",
+    "Electric Pickup Truck": "EV",
+    "Hybrid Crossover": "SUV"
+}
+
 # --- Dashboard Title ---
 st.set_page_config(page_title="AOE Motors Test Drive Dashboard", layout="wide")
 st.title("🚗 AOE Motors Test Drive Bookings")
@@ -110,11 +138,6 @@ def fetch_bookings_data(location_filter=None, start_date_filter=None, end_date_f
         st.error(f"Error fetching data from Supabase: {e}")
         return []
 
-# --- REMOVED: Function to Fetch Vehicle Data from Backend ---
-# @st.cache_data(ttl=3600)
-# def fetch_vehicles_data_from_backend():
-#    ...
-
 # --- Function to Update Data in Supabase ---
 def update_booking_field(request_id, field_name, new_value):
     """Updates a specific field for a booking in Supabase using request_id."""
@@ -130,11 +153,96 @@ def update_booking_field(request_id, field_name, new_value):
         st.error(f"Error updating {field_name} in Supabase: {e}")
 
 # --- Function to Generate Follow-up Email (AI) ---
-def generate_followup_email(customer_name, customer_email, vehicle_name, sales_notes, vehicle_details):
+def generate_followup_email(customer_name, customer_email, vehicle_name, sales_notes, vehicle_details, current_vehicle_brand=None): # Added current_vehicle_brand
     features_str = vehicle_details.get("features", "cutting-edge technology and a luxurious experience.")
     vehicle_type = vehicle_details.get("type", "vehicle")
     powertrain = vehicle_details.get("powertrain", "advanced performance")
 
+    # --- Prepare competitor comparison context (NEW LOGIC) ---
+    comparison_context = ""
+    prompt_instructions = "" # Initialize here
+
+    if current_vehicle_brand and current_vehicle_brand.lower() == "ford":
+        aoe_segment_key = AOE_TYPE_TO_COMPETITOR_SEGMENT_MAP.get(vehicle_type)
+        if aoe_segment_key and aoe_segment_key in COMPETITOR_VEHICLE_DATA["Ford"]:
+            ford_competitor = COMPETITOR_VEHICLE_DATA["Ford"][aoe_segment_key]
+            comparison_context = f"""
+            The customer's current vehicle brand is Ford. The AOE {vehicle_name} falls into the {aoe_segment_key} segment.
+            A representative Ford model in this segment is the {ford_competitor['model_name']} with features: {ford_competitor['features']}.
+            """
+            # Adjust prompt for explicit comparison
+            prompt_instructions = f"""
+            - Start with a polite greeting.
+            - Acknowledge their test drive.
+            - Crucially, directly address the customer's stated issues from the sales notes. For each issue mentioned, explain how specific features of the AOE {vehicle_name} (from the provided list) directly resolve or alleviate that concern.
+                - If "high EV cost" is mentioned: Focus on long-term savings, reduced fuel costs, potential tax credits, Vehicle-to-Grid (V2G) if applicable (Volt).
+                - If "charging anxiety" is mentioned: Highlight ultra-fast charging, solar integration (Volt), extensive charging network, range.
+                - If the sales notes indicate indecisiveness (e.g., "not sure what he wants") or loyalty to another brand, gently acknowledge this.
+                - **Given the customer's interest in Ford, compare the AOE {vehicle_name} with the representative Ford {aoe_segment_key} model ({ford_competitor['model_name']}) on 2-3 key differentiating features/specifications. Present this as a concise comparison in a TABLE format, highlighting where the AOE {vehicle_name} excels or offers a distinct advantage, using the format: "AOE {vehicle_name} vs. {ford_competitor['model_name']}".**
+                - If other issues are mentioned: Adapt relevant features.
+            - When highlighting features, be slightly technical to demonstrate the real value proposition, using terms from the 'AOE {vehicle_name} Key Features' list where appropriate. Ensure the benefit is clear and compelling.
+            - **Do NOT use bolding (e.g., `**text**`) in the email body.**
+            - If no specific issues are mentioned, write a general follow-up highlighting key benefits.
+            - End with a low-pressure call to action. Instead of demanding a call or visit, offer to provide further specific information (e.g., a detailed digital brochure, a personalized feature comparison, or answers to any specific questions via email) that they can review at their convenience, respecting their need for time and information gathering.
+            - Maintain a professional, empathetic, and persuasive tone, respecting their stated communication preferences.
+            - Output only the email content (Subject and Body), in plain text format. Do NOT use HTML.
+            - Separate Subject and Body with "Subject: " at the beginning of the subject line.
+            """
+        else: # Ford but no matching segment data, or general Ford case
+            prompt_instructions = f"""
+            - Start with a polite greeting.
+            - Acknowledge their test drive.
+            - Crucially, directly address the customer's stated issues from the sales notes. For each issue mentioned, explain how specific features of the AOE {vehicle_name} (from the provided list) directly resolve or alleviate that concern.
+                - If "high EV cost" is mentioned: Focus on long-term savings, reduced fuel costs, potential tax credits, Vehicle-to-Grid (V2G) if applicable (Volt).
+                - If "charging anxiety" is mentioned: Highlight ultra-fast charging, solar integration (Volt), extensive charging network, range.
+                - If the sales notes indicate indecisiveness (e.g., "not sure what he wants") or loyalty to another brand (e.g., "looking for car in current brand"), gently acknowledge this. Position the AOE {vehicle_name} as a compelling, modern alternative by focusing on clear, concise value propositions and AOE's distinct advantages (e.g., innovation, advanced technology, future-proofing) that might appeal to someone considering traditional brands like Ford.
+                - If other issues are mentioned: Adapt relevant features.
+            - When highlighting features, be slightly technical to demonstrate the real value proposition, using terms from the 'AOE {vehicle_name} Key Features' list where appropriate. Ensure the benefit is clear and compelling.
+            - **Do NOT use bolding (e.g., `**text**`) in the email body.**
+            - If no specific issues are mentioned, write a general follow-up highlighting key benefits.
+            - End with a low-pressure call to action. Instead of demanding a call or visit, offer to provide further specific information (e.g., a detailed digital brochure, a personalized feature comparison, or answers to any specific questions via email) that they can review at their convenience, respecting their need for time and information gathering.
+            - Maintain a professional, empathetic, and persuasive tone, respecting their stated communication preferences.
+            - Output only the email content (Subject and Body), in plain text format. Do NOT use HTML.
+            - Separate Subject and Body with "Subject: " at the beginning of the subject line.
+            """
+    elif current_vehicle_brand and current_vehicle_brand.lower() in ["toyota", "hyundai", "chevrolet"]:
+        # General differentiation for these brands
+        prompt_instructions = f"""
+        - Start with a polite greeting.
+        - Acknowledge their test drive.
+        - Crucially, directly address the customer's stated issues from the sales notes. For each issue mentioned, explain how specific features of the AOE {vehicle_name} (from the provided list) directly resolve or alleviate that concern.
+            - If "high EV cost" is mentioned: Focus on long-term savings, reduced fuel costs, potential tax credits, Vehicle-to-Grid (V2G) if applicable (Volt).
+            - If "charging anxiety" is mentioned: Highlight ultra-fast charging, solar integration (Volt), extensive charging network, range.
+            - If the sales notes indicate indecisiveness (e.g., "not sure what he wants") or loyalty to another brand (e.g., "looking for car in current brand"), gently acknowledge this. Position the AOE {vehicle_name} as a compelling, modern alternative by focusing on clear, concise value propositions and AOE's distinct advantages (e.g., innovation, advanced technology, future-proofing) that might appeal to someone considering traditional brands like {current_vehicle_brand}.
+            - If other issues are mentioned: Adapt relevant features.
+        - When highlighting features, be slightly technical to demonstrate the real value proposition, using terms from the 'AOE {vehicle_name} Key Features' list where appropriate. Ensure the benefit is clear and compelling.
+        - **Do NOT use bolding (e.g., `**text**`) in the email body.**
+        - If no specific issues are mentioned, write a general follow-up highlighting key benefits.
+        - End with a low-pressure call to action. Instead of demanding a call or visit, offer to provide further specific information (e.g., a detailed digital brochure, a personalized feature comparison, or answers to any specific questions via email) that they can review at their convenience, respecting their need for time and information gathering.
+        - Maintain a professional, empathetic, and persuasive tone, respecting their stated communication preferences.
+        - Output only the email content (Subject and Body), in plain text format. Do NOT use HTML.
+        - Separate Subject and Body with "Subject: " at the beginning of the subject line.
+        """
+    else:
+        # Default prompt for no specific brand comparison or general case
+        prompt_instructions = f"""
+        - Start with a polite greeting.
+        - Acknowledge their test drive.
+        - Crucially, directly address the customer's stated issues from the sales notes. For each issue mentioned, explain how specific features of the AOE {vehicle_name} (from the provided list) directly resolve or alleviate that concern.
+            - If "high EV cost" is mentioned: Focus on long-term savings, reduced fuel costs, potential tax credits, Vehicle-to-Grid (V2G) if applicable (Volt).
+            - If "charging anxiety" is mentioned: Highlight ultra-fast charging, solar integration (Volt), extensive charging network, range.
+            - If the sales notes indicate indecisiveness (e.g., "not sure what he wants") or loyalty to another brand (e.g., "looking for car in current brand"), gently acknowledge this. Position the AOE {vehicle_name} as a compelling, modern alternative by focusing on clear, concise value propositions and AOE's distinct advantages (e.g., innovation, advanced technology, future-proofing).
+            - If other issues are mentioned: Adapt relevant features.
+        - When highlighting features, be slightly technical to demonstrate the real value proposition, using terms from the 'AOE {vehicle_name} Key Features' list where appropriate. Ensure the benefit is clear and compelling.
+        - **Do NOT use bolding (e.g., `**text**`) in the email body.**
+        - If no specific issues are mentioned, write a general follow-up highlighting key benefits.
+        - End with a low-pressure call to action. Instead of demanding a call or visit, offer to provide further specific information (e.g., a detailed digital brochure, a personalized feature comparison, or answers to any specific questions via email) that they can review at their convenience, respecting their need for time and information gathering.
+        - Maintain a professional, empathetic, and persuasive tone, respecting their stated communication preferences.
+        - Output only the email content (Subject and Body), in plain text format. Do NOT use HTML.
+        - Separate Subject and Body with "Subject: " at the beginning of the subject line.
+        """
+
+    # Combine base prompt and instructions
     prompt = f"""
     Draft a polite, helpful, and persuasive follow-up email to a customer who recently test-drove an AOE {vehicle_name}.
 
@@ -147,19 +255,10 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
     **AOE {vehicle_name} Key Features:**
     - {features_str}
 
+    {comparison_context} # Add comparison context here
+
     **Email Instructions:**
-    - Start with a polite greeting.
-    - Acknowledge their test drive.
-    - Crucially, directly address the customer's stated issues from the sales notes. For each issue mentioned, explain how specific features of the AOE {vehicle_name} (from the provided list) directly resolve or alleviate that concern.
-        - If "high EV cost" is mentioned: Focus on long-term savings, reduced fuel costs, potential tax credits, Vehicle-to-Grid (V2G) if applicable (Volt).
-        - If "charging anxiety" is mentioned: Highlight ultra-fast charging, solar integration (Volt), extensive charging network, range.
-        - If other issues are mentioned: Adapt relevant features.
-    - **When highlighting features, you can be slightly technical to demonstrate the real value proposition, using terms from the 'AOE {vehicle_name} Key Features' list where appropriate, but ensure the benefit is clear.**
-    - If no specific issues are mentioned, write a general follow-up highlighting key benefits.
-    - End with a call to action to schedule another call or visit to discuss further.
-    - Maintain a professional, empathetic, and persuasive tone.
-    - Output only the email content (Subject and Body), in plain text format. Do NOT use HTML.
-    - Separate Subject and Body with "Subject: " at the beginning of the subject line.
+    {prompt_instructions}
     """
 
     try:
@@ -171,7 +270,7 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,
-                max_tokens=600
+                max_tokens=800 # Increased max tokens to accommodate comparisons
             )
             draft = completion.choices[0].message.content.strip()
             if "Subject:" in draft:
@@ -432,9 +531,13 @@ if bookings_data:
             if selected_action == 'Follow Up Required' and 'draft_email_button' in locals() and draft_email_button and new_sales_notes.strip() != "":
                 # Use the hardcoded AOE_VEHICLE_DATA directly
                 vehicle_details = AOE_VEHICLE_DATA.get(row['vehicle'], {})
+                # Extract the brand from 'current_vehicle' (e.g., "Ford F-150" -> "Ford")
+                current_vehicle_brand_val = row['current_vehicle'].split(' ')[0] if row['current_vehicle'] else None
+                
                 if vehicle_details:
                     followup_subject, followup_body = generate_followup_email(
-                        row['full_name'], row['email'], row['vehicle'], new_sales_notes, vehicle_details
+                        row['full_name'], row['email'], row['vehicle'], new_sales_notes, vehicle_details,
+                        current_vehicle_brand=current_vehicle_brand_val # Pass current vehicle brand
                     )
                     if followup_subject and followup_body:
                         st.session_state[f"draft_subject_{row['request_id']}"] = followup_subject
