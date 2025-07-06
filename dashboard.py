@@ -178,9 +178,14 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
                 - If "high EV cost" is mentioned: Focus on long-term savings, reduced fuel costs, potential tax credits, Vehicle-to-Grid (V2G) if applicable ({vehicle_name} is Volt).
                 - If "charging anxiety" is mentioned: Highlight ultra-fast charging, solar integration ({vehicle_name} is Volt), extensive charging network, range.
                 - If other issues are mentioned: Adapt relevant features.
-            - Given the customer's interest in Ford, compare the {vehicle_name} with the representative Ford {aoe_segment_key} model ({ford_competitor['model_name']}) on 2-3 key differentiating features/specifications. Present this as a concise comparison in a well-formatted markdown TABLE with proper spacing for readability, using the format: "{vehicle_name} vs. {ford_competitor['model_name']}". Highlight where the {vehicle_name} excels or offers a distinct advantage. If a specific comparison point is not available for the Ford competitor from the provided features, infer a general or typical characteristic for that type of Ford vehicle, rather than stating 'not specified' or 'may vary'.
+            - Given the customer's interest in Ford, compare the {vehicle_name} with the representative Ford {aoe_segment_key} model ({ford_competitor['model_name']}) on 2-3 key differentiating features/specifications. Present this as a concise comparison in a clear, structured list format, under a heading like "Comparison: {vehicle_name} vs. {ford_competitor['model_name']}". For each feature, clearly state the feature name, then list the benefit/spec for {vehicle_name} and then for {ford_competitor['model_name']}.
+              Example format:
+              **Feature Name:**
+              - {vehicle_name}: [Value/Description]
+              - {ford_competitor['model_name']}: [Value/Description]
+              Highlight where the {vehicle_name} excels or offers a distinct advantage. If a specific comparison point is not available for the Ford competitor from the provided features, infer a general or typical characteristic for that type of Ford vehicle, rather than stating 'not specified' or 'may vary'.
             - When highlighting features, be slightly technical to demonstrate the real value proposition, using terms from the '{vehicle_name} Key Features' list where appropriate. Ensure the benefit is clear and compelling.
-            - Do NOT use bolding (e.g., `**text**`) in the email body.
+            - Do NOT use bolding (e.g., `**text**`) in the email body except for section headings like "Comparison:" or feature names within the comparison.
             - If no specific issues are mentioned, write a general follow-up highlighting key benefits.
             - End with a low-pressure call to action. Instead of demanding a call or visit, offer to provide further specific information (e.g., a detailed digital brochure, a personalized feature comparison, or answers to any specific questions via email) that they can review at their convenience, respecting their need for time and information gathering.
             - Maintain a professional, empathetic, and persuasive tone, respecting their stated communication preferences.
