@@ -339,14 +339,66 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
         st.error(f"Error drafting email with AI: {e}")
         return None, None
 
+# --- New Function to Generate "Lost" Email ---
+def generate_lost_email(customer_name, vehicle_name):
+    subject = f"We Miss You, {customer_name}!"
+    body = f"""Dear {customer_name},
+
+We noticed you haven't moved forward with your interest in the {vehicle_name}. We understand circumstances change, but we'd love to hear from you if you have any feedback or if there's anything we can do to help.
+
+Sincerely,
+AOE Motors Team
+"""
+    return subject, body
+
+# --- New Function to Generate "Converted" (Welcome) Email ---
+def generate_welcome_email(customer_name, vehicle_name):
+    subject = f"Welcome to the AOE Family, {customer_name}!"
+    body = f"""Dear {customer_name},
+
+Welcome to the AOE Motors family! We're thrilled you chose the {vehicle_name}.
+
+To help you get started, here are some important next steps and documents:
+* **Next Steps:** Our sales representative will be in touch shortly to finalize your delivery details and walk you through your new vehicle's features.
+* **Important Documents:** You'll find your purchase agreement, warranty information, and a quick-start guide for your {vehicle_name} attached to this email (or accessible via the link below).
+    [Link to Digital Documents/Owner's Manual - e.g., www.aoemotors.com/your-vehicle-docs]
+
+Should you have any questions before then, please don't hesitate to reach out to your sales representative or our customer support team at support@aoemotors.com.
+
+We're excited for you to experience the AOE difference!
+
+Sincerely,
+The AOE Motors Team
+"""
+    return subject, body
+
+
 # --- Main Dashboard Display Logic ---
 st.set_page_config(page_title="AOE Motors Test Drive Dashboard", layout="wide")
 st.title("🚗 AOE Motors Test Drive Bookings")
 st.markdown("---")
 
-# Initialize session state for expanded lead
+# Initialize session state for expanded lead and messages
 if 'expanded_lead_id' not in st.session_state:
     st.session_state.expanded_lead_id = None
+if 'info_message' not in st.session_state:
+    st.session_state.info_message = None
+if 'success_message' not in st.session_state:
+    st.session_state.success_message = None
+if 'error_message' not in st.session_state:
+    st.session_state.error_message = None
+
+# Display messages stored in session state
+if st.session_state.info_message:
+    st.info(st.session_state.info_message)
+    st.session_state.info_message = None # Clear message after display
+if st.session_state.success_message:
+    st.success(st.session_state.success_message)
+    st.session_state.success_message = None # Clear message after display
+if st.session_state.error_message:
+    st.error(st.session_state.error_message)
+    st.session_state.error_message = None # Clear message after display
+
 
 # --- Function to Fetch Data from Supabase ---
 @st.cache_data(ttl=30)
@@ -371,7 +423,7 @@ def fetch_bookings_data(location_filter=None, start_date_filter=None, end_date_f
         else:
             return []
     except Exception as e:
-        st.error(f"Error fetching data from Supabase: {e}")
+        st.session_state.error_message = f"Error fetching data from Supabase: {e}"
         return []
 
 # --- Function to Update Data in Supabase ---
@@ -380,17 +432,17 @@ def update_booking_field(request_id, field_name, new_value):
     try:
         response = supabase.from_(SUPABASE_TABLE_NAME).update({field_name: new_value}).eq('request_id', request_id).execute()
         if response.data:
-            st.success(f"Successfully updated {field_name} for {request_id}!")
+            st.session_state.success_message = f"Successfully updated {field_name} for {request_id}!"
             st.cache_data.clear()
         else:
-            st.error(f"Failed to update {field_name} for {request_id}. Response: {response}")
+            st.session_state.error_message = f"Failed to update {field_name} for {request_id}. Response: {response}"
     except Exception as e:
-        st.error(f"Error updating {field_name} in Supabase: {e}")
+        st.session_state.error_message = f"Error updating {field_name} in Supabase: {e}"
 
 # --- Function to Send Email ---
 def send_email(recipient_email, subject, body):
     if not ENABLE_EMAIL_SENDING:
-        st.error("Email sending is disabled. Credentials not fully configured.")
+        st.session_state.error_message = "Email sending is disabled. Credentials not fully configured."
         return False
     msg = MIMEMultipart()
     msg["From"] = email_address
@@ -401,10 +453,10 @@ def send_email(recipient_email, subject, body):
         with smtplib.SMTP_SSL(email_host, email_port) as server:
             server.login(email_address, email_password)
             server.send_message(msg)
-        st.success(f"Email successfully sent to {recipient_email}!")
+        st.session_state.success_message = f"Email successfully sent to {recipient_email}!"
         return True
     except Exception as e:
-        st.error(f"Failed to send email: {e}")
+        st.session_state.error_message = f"Failed to send email: {e}"
         return False
 
 # Define fixed action status options based on lead score
@@ -513,34 +565,17 @@ if bookings_data:
                     updates_made = True
 
                 if selected_action == 'Lost' and selected_action != current_action and ENABLE_EMAIL_SENDING:
-                    st.info(f"Customer {row['full_name']} marked as Lost. Sending 'Lost' email...")
-                    # Assuming generate_lost_email exists elsewhere or needs to be added
-                    # For now, adding a placeholder for demonstration
-                    lost_subject = f"We Miss You, {row['full_name']}!"
-                    lost_body = f"Dear {row['full_name']},\n\nWe noticed you haven't moved forward with your interest in the {row['vehicle']}. We understand circumstances change, but we'd love to hear from you if you have any feedback or if there's anything we can do to help. \n\nSincerely,\nAOE Motors Team"
-                    
-                    if send_email(row['email'], lost_subject, lost_body):
-                        st.success(f"'Lost' email sent to {row['full_name']}.")
-                    else:
-                        st.error("Failed to send 'Lost' email.")
+                    st.session_state.info_message = f"Customer {row['full_name']} marked as Lost. Sending 'Lost' email..."
+                    lost_subject, lost_body = generate_lost_email(row['full_name'], row['vehicle'])
+                    send_email(row['email'], lost_subject, lost_body) # send_email now updates session_state for success/error
                 
                 elif selected_action == 'Converted' and selected_action != current_action and ENABLE_EMAIL_SENDING:
-                    st.info(f"Customer {row['full_name']} marked as Converted. Sending welcome email...")
-                    # Assuming generate_welcome_email exists elsewhere or needs to be added
-                    # For now, adding a placeholder for demonstration
-                    welcome_subject = f"Welcome to the AOE Family, {row['full_name']}!"
-                    welcome_body = f"Dear {row['full_name']},\n\nWelcome to the AOE Motors family! We're thrilled you chose the {row['vehicle']}. We look forward to providing you with an exceptional ownership experience.\n\nSincerely,\nAOE Motors Team"
-
-                    if welcome_subject and welcome_body:
-                        if send_email(row['email'], welcome_subject, welcome_body):
-                            st.success(f"Welcome email sent to {row['full_name']}.")
-                        else:
-                            st.error("Failed to send welcome email.")
-                    else:
-                        st.error("Could not generate welcome email.")
+                    st.session_state.info_message = f"Customer {row['full_name']} marked as Converted. Sending welcome email..."
+                    welcome_subject, welcome_body = generate_welcome_email(row['full_name'], row['vehicle'])
+                    send_email(row['email'], welcome_subject, welcome_body) # send_email now updates session_state for success/error
 
                 if updates_made:
-                    st.session_state.expanded_lead_id = row['request_id']
+                    # No need to set expanded_lead_id here, as rerun will rebuild the UI based on fresh data and existing session state
                     st.rerun()
 
             # Logic for drafting follow-up email (manual send)
@@ -548,11 +583,12 @@ if bookings_data:
                 if new_sales_notes.strip() == "":
                     st.warning("Sales notes are mandatory to draft a follow-up email.")
                 else:
-                    st.info("Analyzing sales notes for relevance and sentiment...")
+                    st.session_state.info_message = "Analyzing sales notes for relevance and sentiment..."
                     notes_relevance = check_notes_relevance(new_sales_notes)
 
                     if notes_relevance == "IRRELEVANT":
                         st.warning("The sales notes provided are unclear or irrelevant. Please update the 'Sales Notes' with more descriptive information (e.g., specific customer concerns, positive feedback, or key discussion points) to enable the AI to draft a relevant email.")
+                        st.session_state.info_message = None # Clear info message if there's a warning
                     else:
                         notes_sentiment = analyze_sentiment(new_sales_notes)
                         
@@ -569,11 +605,14 @@ if bookings_data:
                                 st.session_state[f"draft_subject_{row['request_id']}"] = followup_subject
                                 st.session_state[f"draft_body_{row['request_id']}"] = followup_body
                                 st.session_state.expanded_lead_id = row['request_id']
+                                st.session_state.info_message = None # Clear info message if draft successful
                                 st.rerun()
                             else:
-                                st.error("Failed to draft email. Please check sales notes and try again.")
+                                st.session_state.error_message = "Failed to draft email. Please check sales notes and try again."
+                                st.session_state.info_message = None # Clear info message if draft failed
                         else:
-                            st.error(f"Vehicle details for {row['vehicle']} not found in hardcoded data. Cannot draft email.")
+                            st.session_state.error_message = f"Vehicle details for {row['vehicle']} not found in hardcoded data. Cannot draft email."
+                            st.session_state.info_message = None # Clear info message if vehicle details missing
 
             if selected_action == 'Follow Up Required' and f"draft_subject_{row['request_id']}" in st.session_state and f"draft_body_{row['request_id']}" in st.session_state:
                 draft_subject = st.session_state[f"draft_subject_{row['request_id']}"]
@@ -586,8 +625,10 @@ if bookings_data:
                 if ENABLE_EMAIL_SENDING:
                     if st.button(f"Click to Send Drafted Email to {row['full_name']}", key=f"send_draft_email_btn_{row['request_id']}"):
                         if send_email(row['email'], edited_subject, edited_body):
+                            # Clear draft specific session state variables
                             st.session_state.pop(f"draft_subject_{row['request_id']}", None)
                             st.session_state.pop(f"draft_body_{row['request_id']}", None)
+                            # Keep the lead expanded to show the updated status immediately
                             st.session_state.expanded_lead_id = row['request_id']
                             st.rerun()
                 else:
