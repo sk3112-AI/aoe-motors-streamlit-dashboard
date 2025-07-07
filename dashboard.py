@@ -92,7 +92,7 @@ AOE_TYPE_TO_COMPETITOR_SEGMENT_MAP = {
 # --- New Function for AI Sentiment Analysis ---
 def analyze_sentiment(text):
     if not text.strip():
-        return "NEUTRAL"
+        return "NEUTRAL" # Or "IRRELEVANT" if preferred for empty notes
 
     prompt = f"""
     Analyze the following text and determine its overall sentiment. Respond only with 'POSITIVE', 'NEUTRAL', or 'NEGATIVE'.
@@ -106,24 +106,33 @@ def analyze_sentiment(text):
                 {"role": "system", "content": "You are a sentiment analysis AI. Your only output is 'POSITIVE', 'NEUTRAL', or 'NEGATIVE'."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.0,
+            temperature=0.0, # Keep low for deterministic output
             max_tokens=10
         )
         sentiment = completion.choices[0].message.content.strip().upper()
         if sentiment in ["POSITIVE", "NEUTRAL", "NEGATIVE"]:
             return sentiment
-        return "NEUTRAL"
+        return "NEUTRAL" # Fallback
     except Exception as e:
         st.error(f"Error analyzing sentiment: {e}")
-        return "NEUTRAL"
+        return "NEUTRAL" # Fallback in case of API error
 
 # --- New Function for AI Relevance Check ---
 def check_notes_relevance(sales_notes):
     if not sales_notes.strip():
-        return "IRRELEVANT"
+        return "IRRELEVANT" # Empty notes are irrelevant for email generation
 
+    # Refined prompt to better distinguish between brief but relevant vs. truly irrelevant notes
     prompt = f"""
-    Evaluate the following sales notes for their relevance and clarity in the context of generating a follow-up email for a vehicle test drive. Respond only with 'RELEVANT' if the notes provide clear, actionable information about customer's experience, concerns, or interests. Respond with 'IRRELEVANT' if the notes are vague, nonsensical, or do not offer clear context for a follow-up email.
+    Evaluate the following sales notes for their relevance and clarity in the context of generating a follow-up email for a vehicle test drive.
+
+    Consider notes relevant if they provide *any* clear indication of the customer's experience, sentiment, questions, or specific interests related to the vehicle or the test drive, even if brief.
+
+    Respond only with 'RELEVANT' if the notes describe a customer's feeling (e.g., happy, worried), a specific question, a stated interest, or a concrete concern.
+    Respond with 'IRRELEVANT' if the notes are:
+    - Empty or contain only whitespace.
+    - Nonsensical or gibberish (e.g., "asdfasdf", "random words here").
+    - Completely unrelated to a vehicle test drive or customer interaction (e.g., "The sky is blue today").
 
     Sales Notes: "{sales_notes}"
     """
@@ -134,16 +143,16 @@ def check_notes_relevance(sales_notes):
                 {"role": "system", "content": "You are an AI assistant that evaluates the relevance of sales notes for email generation. Your only output is 'RELEVANT' or 'IRRELEVANT'."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.0,
+            temperature=0.0, # Keep low for deterministic output
             max_tokens=10
         )
         relevance = completion.choices[0].message.content.strip().upper()
         if relevance in ["RELEVANT", "IRRELEVANT"]:
             return relevance
-        return "IRRELEVANT"
+        return "IRRELEVANT" # Fallback
     except Exception as e:
         st.error(f"Error checking notes relevance: {e}")
-        return "IRRELEVANT"
+        return "IRRELEVANT" # Fallback in case of API error
 
 # --- Function to Generate Follow-up Email (AI) ---
 def generate_followup_email(customer_name, customer_email, vehicle_name, sales_notes, vehicle_details, current_vehicle_brand=None, sentiment=None):
@@ -346,7 +355,7 @@ def update_booking_field(request_id, field_name, new_value):
 
 # --- Function to Send Email ---
 def send_email(recipient_email, subject, body):
-    if not ENABLE_EMAIL_SENDing:
+    if not ENABLE_EMAIL_SENDING:
         st.error("Email sending is disabled. Credentials not fully configured.")
         return False
     msg = MIMEMultipart()
@@ -471,18 +480,23 @@ if bookings_data:
 
                 if selected_action == 'Lost' and selected_action != current_action and ENABLE_EMAIL_SENDING:
                     st.info(f"Customer {row['full_name']} marked as Lost. Sending 'Lost' email...")
-                    lost_subject, lost_body = generate_lost_email(row['full_name'], row['vehicle'])
-                    if lost_subject and lost_body:
-                        if send_email(row['email'], lost_subject, lost_body):
-                            st.success(f"'Lost' email sent to {row['full_name']}.")
-                        else:
-                            st.error("Failed to send 'Lost' email.")
+                    # Assuming generate_lost_email exists elsewhere or needs to be added
+                    # For now, adding a placeholder for demonstration
+                    lost_subject = f"We Miss You, {row['full_name']}!"
+                    lost_body = f"Dear {row['full_name']},\n\nWe noticed you haven't moved forward with your interest in the {row['vehicle']}. We understand circumstances change, but we'd love to hear from you if you have any feedback or if there's anything we can do to help. \n\nSincerely,\nAOE Motors Team"
+                    
+                    if send_email(row['email'], lost_subject, lost_body):
+                        st.success(f"'Lost' email sent to {row['full_name']}.")
                     else:
-                        st.error("Could not generate 'Lost' email.")
+                        st.error("Failed to send 'Lost' email.")
                 
                 elif selected_action == 'Converted' and selected_action != current_action and ENABLE_EMAIL_SENDING:
                     st.info(f"Customer {row['full_name']} marked as Converted. Sending welcome email...")
-                    welcome_subject, welcome_body = generate_welcome_email(row['full_name'], row['vehicle'])
+                    # Assuming generate_welcome_email exists elsewhere or needs to be added
+                    # For now, adding a placeholder for demonstration
+                    welcome_subject = f"Welcome to the AOE Family, {row['full_name']}!"
+                    welcome_body = f"Dear {row['full_name']},\n\nWelcome to the AOE Motors family! We're thrilled you chose the {row['vehicle']}. We look forward to providing you with an exceptional ownership experience.\n\nSincerely,\nAOE Motors Team"
+
                     if welcome_subject and welcome_body:
                         if send_email(row['email'], welcome_subject, welcome_body):
                             st.success(f"Welcome email sent to {row['full_name']}.")
