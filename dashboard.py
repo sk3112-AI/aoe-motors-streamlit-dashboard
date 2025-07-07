@@ -571,7 +571,8 @@ if bookings_data:
                 edited_subject = st.text_input("Subject:", value=draft_subject, key=f"reviewed_subject_{row['request_id']}")
                 edited_body = st.text_area("Body:", value=draft_body, height=300, key=f"reviewed_body_{row['request_id']}")
 
-                if ENABLE_EMAIL_SENDing:
+                # Corrected typo here from ENABLE_EMAIL_SENDing to ENABLE_EMAIL_SENDING
+                if ENABLE_EMAIL_SENDING:
                     if st.button(f"Click to Send Drafted Email to {row['full_name']}", key=f"send_draft_email_btn_{row['request_id']}"):
                         if send_email(row['email'], edited_subject, edited_body):
                             st.session_state.pop(f"draft_subject_{row['request_id']}", None)
