@@ -284,6 +284,18 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
         - Instead of directly mentioning discounts, subtly hint at "tailored offers" or "value packages" that can be discussed with a sales representative to maximize their value, encouraging them to take the next step.
         - Avoid explicitly discussing specific financing terms or pushing for immediate conversion in this email.
         """
+    elif sentiment == "NEGATIVE":
+        prompt_instructions += """
+        - The email must be highly empathetic, apologetic, and focused on resolution.
+        - Acknowledge their specific frustration or concern (e.g., "frustrated with our process") directly and empathetically in the subject and opening.
+        - Apologize sincerely for any inconvenience or dissatisfaction they experienced.
+        - **CRITICAL: DO NOT include generic feature lists, technical specifications, or comparisons with other brands (like Ford, Toyota, etc.) in this email.** The primary goal is to address their negative experience, not to sell the car.
+        - Offer a clear and actionable path to resolve their issue or address their concerns (e.g., "I'd like to personally ensure this is resolved," "Let's discuss how we can improve," "I'm here to clarify any confusion").
+        - Reassure them that their feedback is invaluable and that AOE Motors is committed to an excellent customer experience.
+        - Focus entirely on rebuilding trust and resolving the negative point.
+        - Keep the tone professional, understanding, and solution-oriented throughout.
+        - The call to action should be solely an invitation for a direct conversation to address and resolve the specific issue.
+        """
 
     prompt = f"""
     Draft a polite, helpful, and persuasive follow-up email to a customer who recently test-drove an {vehicle_name}.
@@ -506,12 +518,12 @@ if bookings_data:
                     # For now, adding a placeholder for demonstration
                     lost_subject = f"We Miss You, {row['full_name']}!"
                     lost_body = f"Dear {row['full_name']},\n\nWe noticed you haven't moved forward with your interest in the {row['vehicle']}. We understand circumstances change, but we'd love to hear from you if you have any feedback or if there's anything we can do to help. \n\nSincerely,\nAOE Motors Team"
-
+                    
                     if send_email(row['email'], lost_subject, lost_body):
                         st.success(f"'Lost' email sent to {row['full_name']}.")
                     else:
                         st.error("Failed to send 'Lost' email.")
-
+                
                 elif selected_action == 'Converted' and selected_action != current_action and ENABLE_EMAIL_SENDING:
                     st.info(f"Customer {row['full_name']} marked as Converted. Sending welcome email...")
                     # Assuming generate_welcome_email exists elsewhere or needs to be added
@@ -543,10 +555,10 @@ if bookings_data:
                         st.warning("The sales notes provided are unclear or irrelevant. Please update the 'Sales Notes' with more descriptive information (e.g., specific customer concerns, positive feedback, or key discussion points) to enable the AI to draft a relevant email.")
                     else:
                         notes_sentiment = analyze_sentiment(new_sales_notes)
-
+                        
                         vehicle_details = AOE_VEHICLE_DATA.get(row['vehicle'], {})
                         current_vehicle_brand_val = row['current_vehicle'].split(' ')[0] if row['current_vehicle'] else None
-
+                        
                         if vehicle_details:
                             followup_subject, followup_body = generate_followup_email(
                                 row['full_name'], row['email'], row['vehicle'], new_sales_notes, vehicle_details,
@@ -571,7 +583,6 @@ if bookings_data:
                 edited_subject = st.text_input("Subject:", value=draft_subject, key=f"reviewed_subject_{row['request_id']}")
                 edited_body = st.text_area("Body:", value=draft_body, height=300, key=f"reviewed_body_{row['request_id']}")
 
-                # Corrected typo here from ENABLE_EMAIL_SENDing to ENABLE_EMAIL_SENDING
                 if ENABLE_EMAIL_SENDING:
                     if st.button(f"Click to Send Drafted Email to {row['full_name']}", key=f"send_draft_email_btn_{row['request_id']}"):
                         if send_email(row['email'], edited_subject, edited_body):
