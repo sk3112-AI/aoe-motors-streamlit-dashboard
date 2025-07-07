@@ -163,18 +163,44 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
     comparison_context = ""
     prompt_instructions = ""
 
-    # Conditional EV-specific instructions based on powertrain
+    # Conditional EV-specific instructions based on powertrain AND sales notes
     ev_instructions = ""
+    sales_notes_lower = sales_notes.lower()
+    ev_cost_keywords = ["high cost", "expensive", "affordability", "price", "budget", "charging cost", "electricity bill", "cost effective"]
+    charging_anxiety_keywords = ["charging", "range anxiety", "where to charge", "how long to charge", "charge time", "battery", "infrastructure"]
+
     if powertrain and powertrain.lower() == "electric":
-        ev_instructions = """
-            - If "high EV cost" is mentioned: Focus on long-term savings, reduced fuel costs, potential tax credits, Vehicle-to-Grid (V2G) capability, and the overall value proposition of electric ownership.
-            - If "charging anxiety" is mentioned: Highlight ultra-fast charging, solar integration (if applicable for the specific EV model), extensive charging network access, and impressive range.
-        """
-    else:
-        ev_instructions = """
-            - If "high EV cost" is mentioned (and vehicle is not EV): Address concerns about fuel efficiency for gasoline/hybrid, or general cost-of-ownership benefits. Do NOT mention EV-specific features like V2G.
-            - If "charging anxiety" is mentioned (and vehicle is not EV): Reframe to discuss convenience of traditional fueling, or the efficiency of hybrid systems. Do NOT mention EV-specific features like charging networks.
-        """
+        # Check for specific EV concerns in sales notes
+        if any(keyword in sales_notes_lower for keyword in ev_cost_keywords):
+            ev_instructions += """
+            - Address any mentioned "high EV cost" or affordability concerns by focusing on long-term savings, reduced fuel costs, potential tax credits, Vehicle-to-Grid (V2G) capability, and the overall value proposition of electric ownership.
+            """
+        if any(keyword in sales_notes_lower for keyword in charging_anxiety_keywords):
+            ev_instructions += """
+            - Address any mentioned "charging anxiety" or range concerns by highlighting ultra-fast charging, solar integration (if applicable for the specific EV model), extensive charging network access, and impressive range.
+            """
+        # If no specific EV concerns, add general EV benefits if appropriate, or keep empty
+        if not ev_instructions.strip(): # If no specific concerns were added
+             ev_instructions = """
+             - Briefly highlight general advantages of electric vehicles like environmental benefits, quiet ride, and low maintenance, if not specifically contradicted by sales notes.
+             """
+    else: # For non-EV vehicles
+        if any(keyword in sales_notes_lower for keyword in ev_cost_keywords): # Customer might compare to EVs or have general cost concerns
+            ev_instructions += """
+            - If customer mentioned 'high EV cost' in comparison, or general cost concerns, reframe to discuss the cost-effectiveness and efficiency of the gasoline/hybrid powertrain of the {vehicle_name}, highlighting its long-term value.
+            """
+        if any(keyword in sales_notes_lower for keyword in charging_anxiety_keywords): # Customer might have charging anxiety from past EV consideration
+            ev_instructions += """
+            - If customer mentioned 'charging anxiety', emphasize the convenience and widespread availability of traditional fueling for the {vehicle_name}.
+            """
+
+    # General instructions for incorporating sales notes
+    sales_notes_incorporation_instruction = """
+    - Naturally incorporate the customer's experience, sentiment, questions, or interests directly into the email body, as if you learned them during a conversation, without explicitly stating "from our sales notes".
+    - Address any *explicitly mentioned* concerns or questions from the sales notes directly.
+    - If no specific negative feedback or concerns are explicitly stated in the 'Customer Issues/Comments (from sales notes)', *do not invent or assume any such concerns*. Instead, focus on reinforcing the positive aspects of their experience and the benefits of the vehicle.
+    """
+
 
     if current_vehicle_brand and current_vehicle_brand.lower() == "ford":
         aoe_segment_key = AOE_TYPE_TO_COMPETITOR_SEGMENT_MAP.get(vehicle_type)
@@ -187,9 +213,8 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
             prompt_instructions = f"""
             - Start with a polite greeting.
             - Acknowledge their test drive.
-            - Naturally incorporate the customer's concerns and preferences directly into the email body, as if you learned them during a conversation, without explicitly stating "from our sales notes". Address each concern mentioned in the sales notes directly. If the customer's current vehicle brand is Ford, acknowledge their familiarity or experience with Ford and frame the conversation as helping them weigh options.
+            {sales_notes_incorporation_instruction}
                 {ev_instructions}
-                - If other issues are mentioned: Adapt relevant features.
             - Given the customer's interest in Ford, compare the {vehicle_name} with the representative Ford {aoe_segment_key} model ({ford_competitor['model_name']}) on 2-3 key differentiating features/specifications. Present this as a concise comparison in a clear, structured list format, under a heading like "Comparison: {vehicle_name} vs. {ford_competitor['model_name']}". For each feature, clearly state the feature name, then list the benefit/spec for {vehicle_name} and then for {ford_competitor['model_name']}.
               Example format:
               **Feature Name:**
@@ -208,9 +233,8 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
             prompt_instructions = f"""
             - Start with a polite greeting.
             - Acknowledge their test drive.
-            - Naturally incorporate the customer's concerns and preferences directly into the email body, as if you learned them during a conversation, without explicitly stating "from our sales notes". Address each concern mentioned in the sales notes directly. If the customer's current vehicle brand is Ford, acknowledge their familiarity or experience with Ford and frame the conversation as helping them weigh options.
+            {sales_notes_incorporation_instruction}
                 {ev_instructions}
-                - If other issues are mentioned: Adapt relevant features.
             - Position the {vehicle_name} as a compelling, modern alternative by focusing on clear, concise value propositions and AOE's distinct advantages (e.g., innovation, advanced technology, future-proofing) that might appeal to someone considering traditional brands like Ford.
             - When highlighting features, be slightly technical to demonstrate the real value proposition, using terms from the '{vehicle_name} Key Features' list where appropriate. Ensure the benefit is clear and compelling.
             - Do NOT use bolding (e.g., `**text**`) in the email body.
@@ -224,9 +248,8 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
         prompt_instructions = f"""
         - Start with a polite greeting.
         - Acknowledge their test drive.
-        - Naturally incorporate the customer's concerns and preferences directly into the email body, as if you learned them during a conversation, without explicitly stating "from our sales notes". Address each concern mentioned in the sales notes directly.
+        {sales_notes_incorporation_instruction}
             {ev_instructions}
-            - If other issues are mentioned: Adapt relevant features.
         - Position the {vehicle_name} as a compelling, modern alternative by focusing on clear, concise value propositions and AOE's distinct advantages (e.g., innovation, advanced technology, future-proofing) that might appeal to someone considering traditional brands like {current_vehicle_brand}.
         - When highlighting features, be slightly technical to demonstrate the real value proposition, using terms from the '{vehicle_name} Key Features' list where appropriate. Ensure the benefit is clear and compelling.
         - Do NOT use bolding (e.g., `**text**`) in the email body.
@@ -241,9 +264,8 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
         prompt_instructions = f"""
         - Start with a polite greeting.
         - Acknowledge their test drive.
-        - Naturally incorporate the customer's concerns and preferences directly into the email body, as if you learned them during a conversation, without explicitly stating "from our sales notes". Address each concern mentioned in the sales notes directly.
+        {sales_notes_incorporation_instruction}
             {ev_instructions}
-            - If other issues are mentioned: Adapt relevant features.
         - When highlighting features, be slightly technical to demonstrate the real value proposition, using terms from the '{vehicle_name} Key Features' list where appropriate. Ensure the benefit is clear and compelling.
         - Do NOT use bolding (e.g., `**text**`) in the email body.
         - If no specific issues are mentioned, write a general follow-up highlighting key benefits.
@@ -484,12 +506,12 @@ if bookings_data:
                     # For now, adding a placeholder for demonstration
                     lost_subject = f"We Miss You, {row['full_name']}!"
                     lost_body = f"Dear {row['full_name']},\n\nWe noticed you haven't moved forward with your interest in the {row['vehicle']}. We understand circumstances change, but we'd love to hear from you if you have any feedback or if there's anything we can do to help. \n\nSincerely,\nAOE Motors Team"
-                    
+
                     if send_email(row['email'], lost_subject, lost_body):
                         st.success(f"'Lost' email sent to {row['full_name']}.")
                     else:
                         st.error("Failed to send 'Lost' email.")
-                
+
                 elif selected_action == 'Converted' and selected_action != current_action and ENABLE_EMAIL_SENDING:
                     st.info(f"Customer {row['full_name']} marked as Converted. Sending welcome email...")
                     # Assuming generate_welcome_email exists elsewhere or needs to be added
@@ -521,10 +543,10 @@ if bookings_data:
                         st.warning("The sales notes provided are unclear or irrelevant. Please update the 'Sales Notes' with more descriptive information (e.g., specific customer concerns, positive feedback, or key discussion points) to enable the AI to draft a relevant email.")
                     else:
                         notes_sentiment = analyze_sentiment(new_sales_notes)
-                        
+
                         vehicle_details = AOE_VEHICLE_DATA.get(row['vehicle'], {})
                         current_vehicle_brand_val = row['current_vehicle'].split(' ')[0] if row['current_vehicle'] else None
-                        
+
                         if vehicle_details:
                             followup_subject, followup_body = generate_followup_email(
                                 row['full_name'], row['email'], row['vehicle'], new_sales_notes, vehicle_details,
@@ -549,7 +571,7 @@ if bookings_data:
                 edited_subject = st.text_input("Subject:", value=draft_subject, key=f"reviewed_subject_{row['request_id']}")
                 edited_body = st.text_area("Body:", value=draft_body, height=300, key=f"reviewed_body_{row['request_id']}")
 
-                if ENABLE_EMAIL_SENDING:
+                if ENABLE_EMAIL_SENDing:
                     if st.button(f"Click to Send Drafted Email to {row['full_name']}", key=f"send_draft_email_btn_{row['request_id']}"):
                         if send_email(row['email'], edited_subject, edited_body):
                             st.session_state.pop(f"draft_subject_{row['request_id']}", None)
