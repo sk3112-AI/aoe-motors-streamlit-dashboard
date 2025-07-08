@@ -14,32 +14,36 @@ from datetime import datetime, date
 load_dotenv()
 
 # --- Supabase Configuration ---
-supabase_url = st.secrets["SUPABASE_URL"] if "SUPABASE_URL" in st.secrets else os.getenv("SUPABASE_URL")
-supabase_key = st.secrets["SUPABASE_KEY"] if "SUPABASE_KEY" in st.secrets else os.getenv("SUPABASE_KEY")
+# MODIFIED: Directly use os.getenv for deployment reliability
+supabase_url = os.getenv("SUPABASE_URL")
+supabase_key = os.getenv("SUPABASE_KEY")
 
 if not supabase_url or not supabase_key:
-    st.error("Supabase URL or Key not found. Please set them in your environment variables or Streamlit secrets.")
+    st.error("Supabase URL or Key not found. Please ensure they are set as environment variables (e.g., in Render Environment Variables or locally in a .env file).")
     st.stop()
 
 supabase: Client = create_client(supabase_url, supabase_key)
 SUPABASE_TABLE_NAME = "bookings"
 
 # --- OpenAI Configuration ---
-openai_api_key = st.secrets["OPENAI_API_KEY"] if "OPENAI_API_KEY" in st.secrets else os.getenv("OPENAI_API_KEY")
+# MODIFIED: Directly use os.getenv for deployment reliability
+openai_api_key = os.getenv("OPENAI_API_KEY")
 if not openai_api_key:
-    st.error("OpenAI API Key not found. Please set it in your environment variables or Streamlit secrets.")
+    st.error("OpenAI API Key not found. Please ensure it is set as an environment variable (e.g., in Render Environment Variables or locally in a .env file).")
     st.stop()
 openai_client = OpenAI(api_key=openai_api_key)
 
 # --- Email Configuration ---
-email_host = st.secrets["EMAIL_HOST"] if "EMAIL_HOST" in st.secrets else os.getenv("EMAIL_HOST")
-email_port = int(st.secrets["EMAIL_PORT"] if "EMAIL_PORT" in st.secrets else os.getenv("EMAIL_PORT", 0))
-email_address = st.secrets["EMAIL_ADDRESS"] if "EMAIL_ADDRESS" in st.secrets else os.getenv("EMAIL_ADDRESS")
-email_password = st.secrets["EMAIL_PASSWORD"] if "EMAIL_PASSWORD" in st.secrets else os.getenv("EMAIL_PASSWORD")
+# MODIFIED: Directly use os.getenv for deployment reliability
+email_host = os.getenv("EMAIL_HOST")
+email_port_str = os.getenv("EMAIL_PORT") # Retrieve as string first
+email_port = int(email_port_str) if email_port_str else 0 # Safely convert to int
+email_address = os.getenv("EMAIL_ADDRESS")
+email_password = os.getenv("EMAIL_PASSWORD")
 
 ENABLE_EMAIL_SENDING = all([email_host, email_port, email_address, email_password])
 if not ENABLE_EMAIL_SENDING:
-    st.warning("Email credentials not fully configured. Email sending will be disabled.")
+    st.warning("Email credentials not fully configured. Email sending will be disabled. Ensure all EMAIL_* variables are set.")
 
 # --- Backend API URL (No longer strictly needed for vehicle data, but kept for other potential calls) ---
 BACKEND_API_URL = "https://aoe-agentic-demo.onrender.com" # Your deployed backend URL
