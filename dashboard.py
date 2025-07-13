@@ -24,19 +24,17 @@ if not supabase_url or not supabase_key:
 
 supabase: Client = create_client(supabase_url, supabase_key)
 SUPABASE_TABLE_NAME = "bookings"
-EMAIL_INTERACTIONS_TABLE_NAME = "email_interactions" # Added for clarity, though not directly used in this dashboard.py for inserts
+EMAIL_INTERACTIONS_TABLE_NAME = "email_interactions"
 
-# --- OpenAI Configuration ---
 openai_api_key = os.getenv("OPENAI_API_KEY")
 if not openai_api_key:
     st.error("OpenAI API Key not found. Please ensure it is set as an environment variable (e.g., in Render Environment Variables or locally in a .env file).")
     st.stop()
 openai_client = OpenAI(api_key=openai_api_key)
 
-# --- Email Configuration ---
 email_host = os.getenv("EMAIL_HOST")
-email_port_str = os.getenv("EMAIL_PORT") # Retrieve as string first
-email_port = int(email_port_str) if email_port_str else 0 # Safely convert to int
+email_port_str = os.getenv("EMAIL_PORT")
+email_port = int(email_port_str) if email_port_str else 0
 email_address = os.getenv("EMAIL_ADDRESS")
 email_password = os.getenv("EMAIL_PASSWORD")
 
@@ -44,10 +42,8 @@ ENABLE_EMAIL_SENDING = all([email_host, email_port, email_address, email_passwor
 if not ENABLE_EMAIL_SENDING:
     st.warning("Email credentials not fully configured. Email sending will be disabled. Ensure all EMAIL_* variables are set.")
 
-# --- Backend API URL (No longer strictly needed for vehicle data, but kept for other potential calls) ---
-BACKEND_API_URL = "https://aoe-agentic-demo.onrender.com" # Your deployed backend URL
+BACKEND_API_URL = "https://aoe-agentic-demo.onrender.com"
 
-# --- Hardcoded Vehicle Data (Existing from previous context) ---
 AOE_VEHICLE_DATA = {
     "AOE Apex": {
         "type": "Luxury Sedan",
@@ -64,40 +60,36 @@ AOE_VEHICLE_DATA = {
         "powertrain": "Gasoline",
         "features": "V8 Twin-Turbo Engine, Adjustable air suspension, Sport Chrono Package, High-performance braking system, Off-road capabilities, Torque vectoring, 360-degree camera, Ambient lighting, Customizable drive modes."
     }
-    # AOE Aero and AOE Stellar are removed as per discussion
 }
 
-# --- Hardcoded Competitor Vehicle Data (Existing from previous context) ---
 COMPETITOR_VEHICLE_DATA = {
     "Ford": {
-        "Sedan": { # Corresponds to AOE Apex (Luxury Sedan)
-            "model_name": "Ford Sedan (e.g., Fusion/Taurus equivalent)", # Placeholder name
+        "Sedan": {
+            "model_name": "Ford Sedan (e.g., Fusion/Taurus equivalent)",
             "features": "2.5L IVCT Atkinson Cycle I-4 Hybrid Engine; 210 Total System Horsepower; Dual-Zone Electronic Automatic Temperature Control; Heated Front Row Seats"
         },
-        "SUV": { # Corresponds to AOE Thunder (Performance SUV)
-            "model_name": "Ford SUV (e.g., Explorer/Expedition equivalent)", # Placeholder name
+        "SUV": {
+            "model_name": "Ford SUV (e.g., Explorer/Expedition equivalent)",
             "features": "Available 440 horsepower 3.5L EcoBoost® V6 High-Output engine, Antilock Brake Systems (ABS), Front-Seat Side-Impact Airbags, SOS Post-Crash Alert System™"
         },
-        "EV": { # Corresponds to AOE Volt (Electric Compact)
-            "model_name": "Ford EV (e.g., Mustang Mach-E/F-150 Lightning equivalent)", # Placeholder name
+        "EV": {
+            "model_name": "Ford EV (e.g., Mustang Mach-E/F-150 Lightning equivalent)",
             "features": "260 miles of EPA-est. range* with standard-range battery and RWD, 387 lb.-ft. of torque† with standard-range battery and RWD, Premium model features (heated/ventilated front seats trimmed with ActiveX® material), SYNC® 4A, over-the-air updates"
         }
     }
 }
 
-# Mapping AOE vehicle_type to Ford competitor segment
 AOE_TYPE_TO_COMPETITOR_SEGMENT_MAP = {
     "Luxury Sedan": "Sedan",
     "Electric Compact": "EV",
     "Performance SUV": "SUV"
 }
 
-# Define fixed action status options based on lead score
 ACTION_STATUS_MAP = {
     "Hot": ["New Lead", "Call Scheduled", "Follow Up Required", "Lost", "Converted"],
     "Warm": ["New Lead", "Call Scheduled", "Follow Up Required", "Lost", "Converted"],
     "Cold": ["New Lead", "Lost", "Converted"],
-    "New": ["New Lead", "Call Scheduled", "Follow Up Required", "Lost", "Converted"] # "New" leads not yet scored
+    "New": ["New Lead", "Call Scheduled", "Follow Up Required", "Lost", "Converted"]
 }
 
 
@@ -432,6 +424,13 @@ The AOE Motors Team
 """
     return subject, body
 
+# MOVED set_expanded_lead to be with other function definitions
+def set_expanded_lead(request_id):
+    if st.session_state.expanded_lead_id == request_id:
+        st.session_state.expanded_lead_id = None
+    else:
+        st.session_state.expanded_lead_id = request_id
+
 
 # --- MAIN DASHBOARD DISPLAY LOGIC (STRICTLY AFTER ALL DEFINITIONS) ---
 
@@ -452,13 +451,13 @@ if 'error_message' not in st.session_state:
 # Display messages stored in session state
 if st.session_state.info_message:
     st.info(st.session_state.info_message)
-    st.session_state.info_message = None # Clear message after display
+    st.session_state.info_message = None
 if st.session_state.success_message:
     st.success(st.session_state.success_message)
-    st.session_state.success_message = None # Clear message after display
+    st.session_state.success_message = None
 if st.session_state.error_message:
     st.error(st.session_state.error_message)
-    st.session_state.error_message = None # Clear message after display
+    st.session_state.error_message = None
 
 
 # Filters Section
@@ -530,7 +529,6 @@ if bookings_data:
                         key=f"action_status_{row['request_id']}"
                     )
                 with col2:
-                    # MODIFIED: Shift current lead score display to the right for symmetry
                     st.markdown(f"<div style='text-align: right;'>**Current Lead Score:** {current_lead_score_text} ({current_numeric_lead_score} points)</div>", unsafe_allow_html=True) 
 
                 is_sales_notes_editable = (selected_action == 'Follow Up Required')
