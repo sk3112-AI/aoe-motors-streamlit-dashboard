@@ -155,7 +155,8 @@ def send_email(recipient_email, subject, body):
     msg.attach(MIMEText(body, "plain"))
     try:
         with smtplib.SMTP_SSL(email_host, email_port) as server:
-            server.login(email_address, email_password)
+            logging.debug('Logging into SMTP server...')
+        server.login(email_address, email_password)
             server.send_message(msg)
         logging.info(f"Email successfully sent to {recipient_email}!")
         st.session_state.success_message = f"Email successfully sent to {recipient_email}!"
@@ -450,10 +451,10 @@ def set_expanded_lead(request_id):
 def interpret_and_query(query_text, df):
     query = query_text.strip().lower()
 
-    # Ensure consistent timezone
     now = pd.Timestamp.now(tz="UTC")
     today = now.normalize()
     last_week = today - pd.Timedelta(days=7)
+    start_of_month = now.replace(day=1).normalize()
 
     if "total leads" in query and "today" in query:
         count = df[df['booking_timestamp'].dt.normalize() == today].shape[0]
