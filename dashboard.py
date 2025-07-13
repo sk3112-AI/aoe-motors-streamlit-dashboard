@@ -4,8 +4,9 @@ import os
 from dotenv import load_dotenv
 import pandas as pd
 from openai import OpenAI
-# Removed smtplib import here, as it's no longer used for sending email
-# Removed email.mime.text and email.mime.multipart as they are solely for smtplib
+import smtplib # Keep this import if you still use smtplib elsewhere, otherwise remove
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart # Keep this if you still use it for other email aspects
 import time
 import requests
 from datetime import datetime, date, timedelta, timezone
@@ -418,7 +419,7 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
                     {"role": "system", "content": "You are a helpful and persuasive sales assistant for AOE Motors."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.7,
+                temperature=0.0, # Adjusted temperature to 0 for more deterministic prompt response
                 max_tokens=800
             )
             draft = completion.choices[0].message.content.strip()
@@ -437,32 +438,29 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
 
 def generate_lost_email(customer_name, vehicle_name):
     subject = f"We Miss You, {customer_name}!"
-    body = f"""Dear {customer_name},
-
-We noticed you haven't moved forward with your interest in the {vehicle_name}. We understand circumstances change, but we'd love to hear from you if you have any feedback or if there's anything we can do to help.
-
-Sincerely,
-AOE Motors Team
+    # MODIFIED: Wrapped body in <p> tags for proper HTML spacing
+    body = f"""<p>Dear {customer_name},</p>
+<p>We noticed you haven't moved forward with your interest in the {vehicle_name}. We understand circumstances change, but we'd love to hear from you if you have any feedback or if there's anything we can do to help.</p>
+<p>Sincerely,</p>
+<p>AOE Motors Team</p>
 """
     return subject, body
 
+# MODIFIED: generate_welcome_email to use <p> tags for spacing
 def generate_welcome_email(customer_name, vehicle_name):
     subject = f"Welcome to the AOE Family, {customer_name}!"
-    body = f"""Dear {customer_name},
-
-Welcome to the AOE Motors family! We're thrilled you chose the {vehicle_name}.
-
-To help you get started, here are some important next steps and documents:
-* **Next Steps:** Our sales representative will be in touch shortly to finalize your delivery details and walk you through your new vehicle's features.
-* **Important Documents:** You'll find your purchase agreement, warranty information, and a quick-start guide for your {vehicle_name} attached to this email (or accessible via the link below).
-    [Link to Digital Documents/Owner's Manual - e.g., www.aoemotors.com/your-vehicle-docs]
-
-Should you have any questions before then, please don't hesitate to reach out to your sales representative or our customer support team at support@aoemotors.com.
-
-We're excited for you to experience the AOE difference!
-
-Sincerely,
-The AOE Motors Team
+    body = f"""<p>Dear {customer_name},</p>
+<p>Welcome to the AOE Motors family! We're thrilled you chose the {vehicle_name}.</p>
+<p>To help you get started, here are some important next steps and documents:</p>
+<ul>
+    <li><b>Next Steps:</b> Our sales representative will be in touch shortly to finalize your delivery details and walk you through your new vehicle's features.</li>
+    <li><b>Important Documents:</b> You'll find your purchase agreement, warranty information, and a quick-start guide for your {vehicle_name} attached to this email (or accessible via the link below).</li>
+</ul>
+<p>[Link to Digital Documents/Owner's Manual - e.g., www.aoemotors.com/your-vehicle-docs]</p>
+<p>Should you have any questions before then, please don't hesitate to reach out to your sales representative or our customer support team at support@aoemotors.com.</p>
+<p>We're excited for you to experience the AOE difference!</p>
+<p>Sincerely,</p>
+<p>The AOE Motors Team</p>
 """
     return subject, body
 
