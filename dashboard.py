@@ -10,7 +10,7 @@ from email.mime.multipart import MIMEMultipart
 import time
 import requests
 from datetime import datetime, date, timedelta
-import json # ADDED: Import the json module
+import json
 
 load_dotenv()
 
@@ -92,10 +92,13 @@ AOE_TYPE_TO_COMPETITOR_SEGMENT_MAP = {
     "Performance SUV": "SUV"
 }
 
-# --- New Function for AI Sentiment Analysis (Existing from previous context) ---
+
+# --- ALL FUNCTION DEFINITIONS (MOVED TO TOP) ---
+
+# --- Function for AI Sentiment Analysis ---
 def analyze_sentiment(text):
     if not text.strip():
-        return "NEUTRAL" # Or "IRRELEVANT" if preferred for empty notes
+        return "NEUTRAL"
 
     prompt = f"""
     Analyze the following text and determine its overall sentiment. Respond only with 'POSITIVE', 'NEUTRAL', or 'NEGATIVE'.
@@ -109,23 +112,22 @@ def analyze_sentiment(text):
                 {"role": "system", "content": "You are a sentiment analysis AI. Your only output is 'POSITIVE', 'NEUTRAL', or 'NEGATIVE'."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.0, # Keep low for deterministic output
+            temperature=0.0,
             max_tokens=10
         )
         sentiment = completion.choices[0].message.content.strip().upper()
         if sentiment in ["POSITIVE", "NEUTRAL", "NEGATIVE"]:
             return sentiment
-        return "NEUTRAL" # Fallback
+        return "NEUTRAL"
     except Exception as e:
         st.error(f"Error analyzing sentiment: {e}")
-        return "NEUTRAL" # Fallback in case of API error
+        return "NEUTRAL"
 
-# --- New Function for AI Relevance Check (Existing from previous context) ---
+# --- Function for AI Relevance Check ---
 def check_notes_relevance(sales_notes):
     if not sales_notes.strip():
-        return "IRRELEVANT" # Empty notes are irrelevant for email generation
+        return "IRRELEVANT"
 
-    # Refined prompt to better distinguish between brief but relevant vs. truly irrelevant notes
     prompt = f"""
     Evaluate the following sales notes for their relevance and clarity in the context of generating a follow-up email for a vehicle test drive.
 
@@ -146,18 +148,18 @@ def check_notes_relevance(sales_notes):
                 {"role": "system", "content": "You are an AI assistant that evaluates the relevance of sales notes for email generation. Your only output is 'RELEVANT' or 'IRRELEVANT'."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.0, # Keep low for deterministic output
+            temperature=0.0,
             max_tokens=10
         )
         relevance = completion.choices[0].message.content.strip().upper()
         if relevance in ["RELEVANT", "IRRELEVANT"]:
             return relevance
-        return "IRRELEVANT" # Fallback
+        return "IRRELEVANT"
     except Exception as e:
         st.error(f"Error checking notes relevance: {e}")
-        return "IRRELEVANT" # Fallback in case of API error
+        return "IRRELEVANT"
 
-# --- Function to Generate Follow-up Email (AI) (Existing from previous context) ---
+# --- Function to Generate Follow-up Email (AI) ---
 def generate_followup_email(customer_name, customer_email, vehicle_name, sales_notes, vehicle_details, current_vehicle_brand=None, sentiment=None):
     features_str = vehicle_details.get("features", "cutting-edge technology and a luxurious experience.")
     vehicle_type = vehicle_details.get("type", "vehicle")
@@ -166,14 +168,12 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
     comparison_context = ""
     prompt_instructions = ""
 
-    # Conditional EV-specific instructions based on powertrain AND sales notes
     ev_instructions = ""
     sales_notes_lower = sales_notes.lower()
     ev_cost_keywords = ["high cost", "expensive", "affordability", "price", "budget", "charging cost", "electricity bill", "cost effective"]
     charging_anxiety_keywords = ["charging", "range anxiety", "where to charge", "how long to charge", "charge time", "battery", "infrastructure"]
 
     if powertrain and powertrain.lower() == "electric":
-        # Check for specific EV concerns in sales notes
         if any(keyword in sales_notes_lower for keyword in ev_cost_keywords):
             ev_instructions += """
             - Address any mentioned "high EV cost" or affordability concerns by focusing on long-term savings, reduced fuel costs, potential tax credits, Vehicle-to-Grid (V2G) capability, and the overall value proposition of electric ownership.
@@ -182,22 +182,20 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
             ev_instructions += """
             - Address any mentioned "charging anxiety" or range concerns by highlighting ultra-fast charging, solar integration (if applicable for the specific EV model), extensive charging network access, and impressive range.
             """
-        # If no specific EV concerns, add general EV benefits if appropriate, or keep empty
-        if not ev_instructions.strip(): # If no specific concerns were added
+        if not ev_instructions.strip():
              ev_instructions = """
              - Briefly highlight general advantages of electric vehicles like environmental benefits, quiet ride, and low maintenance, if not specifically contradicted by sales notes.
              """
-    else: # For non-EV vehicles
-        if any(keyword in sales_notes_lower for keyword in ev_cost_keywords): # Customer might compare to EVs or have general cost concerns
+    else:
+        if any(keyword in sales_notes_lower for keyword in ev_cost_keywords):
             ev_instructions += """
             - If customer mentioned 'high EV cost' in comparison, or general cost concerns, reframe to discuss the cost-effectiveness and efficiency of the gasoline/hybrid powertrain of the {vehicle_name}, highlighting its long-term value.
             """
-        if any(keyword in sales_notes_lower for keyword in charging_anxiety_keywords): # Customer might have charging anxiety from past EV consideration
+        if any(keyword in sales_notes_lower for keyword in charging_anxiety_keywords):
             ev_instructions += """
             - If customer mentioned 'charging anxiety', emphasize the convenience and widespread availability of traditional fueling for the {vehicle_name}.
             """
 
-    # General instructions for incorporating sales notes
     sales_notes_incorporation_instruction = """
     - Naturally incorporate the customer's experience, sentiment, questions, or interests directly into the email body, as if you learned them during a conversation, without explicitly stating "from our sales notes".
     - Address any *explicitly mentioned* concerns or questions from the sales notes directly.
@@ -342,7 +340,7 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
         st.error(f"Error drafting email with AI: {e}")
         return None, None
 
-# --- New Function to Generate "Lost" Email (Existing from previous context) ---
+# --- New Function to Generate "Lost" Email ---
 def generate_lost_email(customer_name, vehicle_name):
     subject = f"We Miss You, {customer_name}!"
     body = f"""Dear {customer_name},
@@ -354,7 +352,7 @@ AOE Motors Team
 """
     return subject, body
 
-# --- New Function to Generate "Converted" (Welcome) Email (Existing from previous context) ---
+# --- New Function to Generate "Converted" (Welcome) Email ---
 def generate_welcome_email(customer_name, vehicle_name):
     subject = f"Welcome to the AOE Family, {customer_name}!"
     body = f"""Dear {customer_name},
@@ -376,9 +374,10 @@ The AOE Motors Team
     return subject, body
 
 
-# --- Main Dashboard Display Logic ---
+# --- Main Dashboard Display Logic (AFTER ALL FUNCTION DEFINITIONS) ---
+
 st.set_page_config(page_title="AOE Motors Test Drive Dashboard", layout="wide")
-st.title("🚗 AOE Motors Test Drive Bookings")
+st.title("🚗 AOE Motors Test Drive Bookings") # Keep this as the single main title
 st.markdown("---")
 
 # Initialize session state for expanded lead and messages
@@ -409,15 +408,16 @@ st.sidebar.header("Filters")
 all_locations = ["All Locations", "New York", "Los Angeles", "Chicago", "Houston", "Miami"]
 selected_location = st.sidebar.selectbox("Filter by Location", all_locations)
 
-col1, col2 = st.sidebar.columns(2)
-with col1:
+col_sidebar1, col_sidebar2 = st.sidebar.columns(2)
+with col_sidebar1:
     # MODIFIED: Set default value for Start Date to 30 days ago
     start_date = st.date_input("Start Date (Booking Timestamp)", value=datetime.today().date() - timedelta(days=30))
-with col2:
+with col_sidebar2:
     # MODIFIED: Set default value for End Date to today's date
     end_date = st.date_input("End Date (Booking Timestamp)", value=datetime.today().date())
 
 # Fetch all data needed for the dashboard with filters
+# This call is now correctly positioned AFTER function definitions
 bookings_data = fetch_bookings_data(selected_location, start_date, end_date)
 
 if bookings_data:
@@ -427,6 +427,7 @@ if bookings_data:
     df = df.sort_values(by='booking_timestamp', ascending=False)
 
     # --- Text-to-Query Section ---
+    # MODIFIED: Removed one duplicate title
     st.subheader("Analytics - Ask a Question! 🤖")
     query_text = st.text_input(
         "Type your question (e.g., 'total leads today', 'hot leads last week', 'total conversions', 'leads lost'):",
@@ -485,7 +486,11 @@ if bookings_data:
                     )
                 with col2:
                     # REMOVED: Lead Score dropdown - it's now dynamically updated by Edge Function
-                    st.write(f"**Current Lead Score:** {current_lead_score_text} ({current_numeric_lead_score} points)") # Display, not editable here
+                    # MODIFIED: Shift current lead score display to the right for symmetry
+                    st.markdown(f"<div style='text-align: right;'>**Current Lead Score:** {current_lead_score_text} ({current_numeric_lead_score} points)</div>", unsafe_allow_html=True) 
+                    # Use a dummy text_input to occupy space if needed, or adjust column widths more finely
+                    # st.text_input("Lead Score (Dynamic)", value=f"{current_lead_score_text} ({current_numeric_lead_score} points)", disabled=True, key=f"dummy_lead_score_{row['request_id']}")
+
 
                 is_sales_notes_editable = (selected_action == 'Follow Up Required')
                 new_sales_notes = st.text_area(
