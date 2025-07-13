@@ -547,6 +547,96 @@ if bookings_data:
     df = df.sort_values(by='booking_timestamp', ascending=False)
 
     # --- Text-to-Query Section ---
+
+import re
+from datetime import datetime, timedelta
+
+# Map your six metrics to lambdas
+METRIC_FUNCS = {
+    "total":     lambda df: df.shape[0],
+    "hot":       lambda df: df[df["lead_score"] == "Hot"].shape[0],
+    "warm":      lambda df: df[df["lead_score"] == "Warm"].shape[0],
+    "cold":      lambda df: df[df["lead_score"] == "Cold"].shape[0],
+    "lost":      lambda df: df[df["action_status"] == "Lost"].shape[0],
+    "converted": lambda df: df[df["action_status"] == "Converted"].shape[0],
+    "follow up": lambda df: df[df["action_status"] == "Follow Up Required"].shape[0],
+}
+
+def interpret_and_query(query_text, df):
+    text = query_text.lower()
+    now = datetime.now()
+
+    # 1) Metric Extraction
+    metric = "total"
+    for key in METRIC_FUNCS:
+        if key in text and key != "total":
+            metric = key
+            break
+
+    # 2) Time-Window Parsing
+    start_dt, end_dt = None, None
+    if "today" in text:
+        start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_dt   = now
+    elif "yesterday" in text:
+        yd = now - timedelta(days=1)
+        start_dt = yd.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_dt   = start_dt + timedelta(days=1)
+
+    # last X days/weeks/months
+    m = re.search(r"last\s+(\d+)\s+days?", text)
+    if m:
+        start_dt = now - timedelta(days=int(m.group(1)))
+        end_dt   = now
+    else:
+        m = re.search(r"last\s+(\d+)\s+weeks?", text)
+        if m:
+            start_dt = now - timedelta(weeks=int(m.group(1)))
+            end_dt   = now
+        else:
+            m = re.search(r"last\s+(\d+)\s+months?", text)
+            if m:
+                start_dt = now - timedelta(days=30 * int(m.group(1)))
+                end_dt   = now
+
+    # 3) Apply filters
+    df_filt = df
+    if start_dt:
+        df_filt = df_filt[df_filt["booking_timestamp"] >= start_dt]
+    if end_dt:
+        df_filt = df_filt[df_filt["booking_timestamp"] <= end_dt]
+
+    # 4) Compute
+    count = METRIC_FUNCS[metric](df_filt)
+
+    # 5) Build human-friendly response
+    descriptions = {
+        "total":     "leads",
+        "hot":       "hot leads",
+        "warm":      "warm leads",
+        "cold":      "cold leads",
+        "lost":      "lost leads",
+        "converted": "converted leads",
+        "follow up": "leads requiring follow-up"
+    }
+    desc = descriptions[metric]
+
+    # describe time window
+    if start_dt and end_dt:
+        if "today" in text:
+            time_str = " today"
+        elif "yesterday" in text:
+            time_str = " yesterday"
+        elif m:
+            unit = "days" if "day" in m.group(0) else "weeks" if "week" in m.group(0) else "months"
+            time_str = f" in the last {m.group(1)} {unit}"
+        else:
+            time_str = ""
+    else:
+        time_str = " of all time"
+
+    return f"📊 You have **{count}** {desc}{time_str}."
+
     st.subheader("Analytics - Ask a Question! 🤖")
     query_text = st.text_input(
         "Type your question (e.g., 'total leads today', 'hot leads last week', 'total conversions', 'leads lost'):",
