@@ -39,7 +39,7 @@ email_address = os.getenv("EMAIL_ADDRESS")
 email_password = os.getenv("EMAIL_PASSWORD")
 
 ENABLE_EMAIL_SENDING = all([email_host, email_port, email_address, email_password])
-if not ENABLE_EMAIL_SENDING:
+if not ENABLE_EMAIL_SENDing:
     st.warning("Email credentials not fully configured. Email sending will be disabled. Ensure all EMAIL_* variables are set.")
 
 BACKEND_API_URL = "https://aoe-agentic-demo.onrender.com"
@@ -126,7 +126,7 @@ def update_booking_field(request_id, field_name, new_value):
         response = supabase.from_(SUPABASE_TABLE_NAME).update({field_name: new_value}).eq('request_id', request_id).execute()
         if response.data:
             st.session_state.success_message = f"Successfully updated {field_name} for {request_id}!"
-            st.cache_data.clear() # Clear cache to refetch updated data
+            st.cache_data.clear()
         else:
             st.session_state.error_message = f"Failed to update {field_name} for {request_id}. Response: {response}"
     except Exception as e:
@@ -435,7 +435,7 @@ def set_expanded_lead(request_id):
 # --- MAIN DASHBOARD DISPLAY LOGIC (STRICTLY AFTER ALL DEFINITIONS) ---
 
 st.set_page_config(page_title="AOE Motors Test Drive Dashboard", layout="wide")
-st.title("🚗 AOE Motors Test Drive Bookings") # Keep this as the single main title
+st.title("🚗 AOE Motors Test Drive Bookings")
 st.markdown("---")
 
 # Initialize session state for expanded lead and messages
@@ -472,7 +472,7 @@ with col_sidebar1:
     start_date = st.date_input("Start Date (Booking Timestamp)", value=datetime.today().date())
 with col_sidebar2:
     # MODIFIED: Set default value for End Date to today's date
-    end_date = st.date_input("End Date (Booking Timestamp)", value=datetime.today().date())
+    end_date = st.date_input("End Date (Booking Timestamp)", value=datetime.today().date() + timedelta(days=1))
 
 # Fetch all data needed for the dashboard with filters
 bookings_data = fetch_bookings_data(selected_location, start_date, end_date)
