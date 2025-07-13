@@ -93,9 +93,71 @@ AOE_TYPE_TO_COMPETITOR_SEGMENT_MAP = {
 }
 
 
-# --- ALL FUNCTION DEFINITIONS (MOVED TO TOP) ---
+# --- ALL FUNCTION DEFINITIONS (MOVED TO TOP FOR STREAMLIT COMPATIBILITY) ---
 
-# --- Function for AI Sentiment Analysis ---
+# --- Function to Fetch Data from Supabase ---
+@st.cache_data(ttl=30)
+def fetch_bookings_data(location_filter=None, start_date_filter=None, end_date_filter=None):
+    """Fetches all booking data from Supabase, with optional filters."""
+    try:
+        # Fetch both lead_score (text) and numeric_lead_score
+        query = supabase.from_(SUPABASE_TABLE_NAME).select(
+            "request_id, full_name, email, vehicle, booking_date, current_vehicle, location, time_frame, action_status, sales_notes, lead_score, numeric_lead_score, booking_timestamp"
+        ).order('booking_timestamp', desc=True)
+
+        if location_filter and location_filter != "All Locations":
+            query = query.eq('location', location_filter)
+        if start_date_filter:
+            # Ensure proper filtering for timestamp which is datetime
+            query = query.gte('booking_timestamp', start_date_filter.isoformat())
+        if end_date_filter:
+            # Add one day to end_date to include the entire end_date
+            query = query.lte('booking_timestamp', (end_date_filter + timedelta(days=1)).isoformat())
+
+        response = query.execute()
+
+        if response.data:
+            return response.data
+        else:
+            return []
+    except Exception as e:
+        st.session_state.error_message = f"Error fetching data from Supabase: {e}"
+        return []
+
+# --- Function to Update Data in Supabase ---
+def update_booking_field(request_id, field_name, new_value):
+    """Updates a specific field for a booking in Supabase using request_id."""
+    try:
+        response = supabase.from_(SUPABASE_TABLE_NAME).update({field_name: new_value}).eq('request_id', request_id).execute()
+        if response.data:
+            st.session_state.success_message = f"Successfully updated {field_name} for {request_id}!"
+            st.cache_data.clear() # Clear cache to refetch updated data
+        else:
+            st.session_state.error_message = f"Failed to update {field_name} for {request_id}. Response: {response}"
+    except Exception as e:
+        st.session_state.error_message = f"Error updating {field_name} in Supabase: {e}"
+
+# --- Function to Send Email ---
+def send_email(recipient_email, subject, body):
+    if not ENABLE_EMAIL_SENDING:
+        st.session_state.error_message = "Email sending is disabled. Credentials not fully configured."
+        return False
+    msg = MIMEMultipart()
+    msg["From"] = email_address
+    msg["To"] = recipient_email
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain"))
+    try:
+        with smtplib.SMTP_SSL(email_host, email_port) as server:
+            server.login(email_address, email_password)
+            server.send_message(msg)
+        st.session_state.success_message = f"Email successfully sent to {recipient_email}!"
+        return True
+    except Exception as e:
+        st.session_state.error_message = f"Failed to send email: {e}"
+        return False
+
+# --- New Function for AI Sentiment Analysis ---
 def analyze_sentiment(text):
     if not text.strip():
         return "NEUTRAL"
@@ -123,7 +185,7 @@ def analyze_sentiment(text):
         st.error(f"Error analyzing sentiment: {e}")
         return "NEUTRAL"
 
-# --- Function for AI Relevance Check ---
+# --- New Function for AI Relevance Check ---
 def check_notes_relevance(sales_notes):
     if not sales_notes.strip():
         return "IRRELEVANT"
@@ -374,6 +436,120 @@ The AOE Motors Team
     return subject, body
 
 
+# --- Text-to-Query (NLQ) Function ---
+@st.cache_data(ttl=60) # Cache LLM response for 60 seconds
+def interpret_and_query(query_text, all_bookings_df):
+    if not query_text.strip():
+        return "Please enter a query."
+
+    # Define the types of queries the LLM can interpret
+    # This JSON structure guides the LLM on expected output
+    prompt = f"""
+    Analyze the following user query and determine its type and any relevant timeframes.
+    Return a JSON object with 'query_type' and 'time_frame'.
+
+    QUERY_TYPES:
+    - "TOTAL_LEADS": User asks for the total number of leads.
+    - "HOT_LEADS": User asks for the number of hot leads.
+    - "CONVERTED_LEADS": User asks for the total number of converted leads (action_status is 'Converted').
+    - "LOST_LEADS": User asks for the total number of lost leads (action_status is 'Lost').
+    - "UNINTERPRETED": If the query does not fit any of the above types.
+
+    TIME_FRAMES (if applicable, otherwise default to "ALL_TIME"):
+    - "TODAY": Refers to today's date.
+    - "YESTERDAY": Refers to yesterday's date.
+    - "LAST_WEEK": Refers to the last 7 days from today.
+    - "LAST_MONTH": Refers to the last 30 days from today.
+    - "LAST_YEAR": Refers to the last 365 days from today.
+    - "ALL_TIME": Refers to all available data.
+
+    If the query type is "UNINTERPRETED", the 'time_frame' should also be "UNINTERPRETED".
+
+    User Query: "{query_text}"
+
+    JSON Output Example:
+    {{
+        "query_type": "TOTAL_LEADS",
+        "time_frame": "LAST_WEEK"
+    }}
+    """
+    
+    try:
+        with st.spinner("Interpreting query..."):
+            completion = openai_client.chat.completions.create(
+                model="gpt-3.5-turbo", # Consider "gpt-4o" for better accuracy if available
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that interprets user queries about sales data and outputs a JSON object."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.0, # Keep low for deterministic JSON output
+                max_tokens=100,
+                response_format={"type": "json_object"}
+            )
+            response_json = json.loads(completion.choices[0].message.content.strip())
+            query_type = response_json.get("query_type")
+            time_frame = response_json.get("time_frame")
+
+        if query_type == "UNINTERPRETED":
+            return "This cannot be processed now - Restricted for demo. Please try queries like 'total leads today', 'hot leads last week', 'total conversions', or 'leads lost'."
+
+        # --- Perform Data Filtering and Calculation ---
+        filtered_df = all_bookings_df.copy()
+
+        # Ensure booking_timestamp is datetime for proper filtering
+        # The column might already be datetime if fetched from cache, but ensure.
+        if not pd.api.types.is_datetime64_any_dtype(filtered_df['booking_timestamp']):
+            filtered_df['booking_timestamp'] = pd.to_datetime(filtered_df['booking_timestamp'])
+
+        # Apply time filter first
+        today_dt = datetime.now()
+        
+        if time_frame == "TODAY":
+            # Compare date parts only
+            filtered_df = filtered_df[filtered_df['booking_timestamp'].dt.date == today_dt.date()]
+        elif time_frame == "YESTERDAY":
+            yesterday_dt = today_dt - timedelta(days=1)
+            filtered_df = filtered_df[filtered_df['booking_timestamp'].dt.date == yesterday_dt.date()]
+        elif time_frame == "LAST_WEEK":
+            last_week_start_dt = today_dt - timedelta(days=7)
+            filtered_df = filtered_df[filtered_df['booking_timestamp'] >= last_week_start_dt]
+        elif time_frame == "LAST_MONTH":
+            last_month_start_dt = today_dt - timedelta(days=30) # Approximate last month
+            filtered_df = filtered_df[filtered_df['booking_timestamp'] >= last_month_start_dt]
+        elif time_frame == "LAST_YEAR":
+            last_year_start_dt = today_dt - timedelta(days=365) # Approximate last year
+            filtered_df = filtered_df[filtered_df['booking_timestamp'] >= last_year_start_dt]
+        # "ALL_TIME" means no date filter applied
+
+        result_count = 0
+        result_message = ""
+
+        if query_type == "TOTAL_LEADS":
+            result_count = filtered_df.shape[0]
+            result_message = f"Total leads {time_frame.lower().replace('_', ' ')}: **{result_count}**"
+        elif query_type == "HOT_LEADS":
+            hot_leads_df = filtered_df[filtered_df['lead_score'] == 'Hot']
+            result_count = hot_leads_df.shape[0]
+            result_message = f"Number of Hot leads {time_frame.lower().replace('_', ' ')}: **{result_count}**"
+        elif query_type == "CONVERTED_LEADS":
+            converted_leads_df = filtered_df[filtered_df['action_status'] == 'Converted']
+            result_count = converted_leads_df.shape[0]
+            result_message = f"Total leads converted {time_frame.lower().replace('_', ' ')}: **{result_count}**"
+        elif query_type == "LOST_LEADS":
+            lost_leads_df = filtered_df[filtered_df['action_status'] == 'Lost']
+            result_count = lost_leads_df.shape[0]
+            result_message = f"Total leads lost {time_frame.lower().replace('_', ' ')}: **{result_count}**"
+        
+        return result_message
+
+    except json.JSONDecodeError:
+        return "LLM did not return a valid JSON. This cannot be processed now - Restricted for demo. Please try queries like 'total leads today', 'hot leads last week', 'total conversions', or 'leads lost'."
+    except Exception as e:
+        # Catch other potential errors, e.g., from LLM call or data processing
+        st.error(f"Error processing query: {e}")
+        return "An error occurred while processing your query. This cannot be processed now - Restricted for demo."
+
+
 # --- Main Dashboard Display Logic (AFTER ALL FUNCTION DEFINITIONS) ---
 
 st.set_page_config(page_title="AOE Motors Test Drive Dashboard", layout="wide")
@@ -417,7 +593,7 @@ with col_sidebar2:
     end_date = st.date_input("End Date (Booking Timestamp)", value=datetime.today().date())
 
 # Fetch all data needed for the dashboard with filters
-# This call is now correctly positioned AFTER function definitions
+# This call is now correctly positioned AFTER all function definitions
 bookings_data = fetch_bookings_data(selected_location, start_date, end_date)
 
 if bookings_data:
