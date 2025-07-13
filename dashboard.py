@@ -474,6 +474,41 @@ def interpret_and_query(query_text, df):
 
 # --- MAIN DASHBOARD DISPLAY LOGIC (STRICTLY AFTER ALL DEFINITIONS) ---
 
+
+def interpret_and_query(query_text, df):
+    query = query_text.strip().lower()
+    today = pd.Timestamp.now().normalize()
+    last_week = today - pd.Timedelta(days=7)
+
+    if "total leads" in query and "today" in query:
+        count = df[df['booking_timestamp'].dt.date == today.date()].shape[0]
+        return f"📊 Total leads today: **{count}**"
+
+    elif "total leads" in query and "last week" in query:
+        count = df[(df['booking_timestamp'] >= last_week) & (df['booking_timestamp'] < today)].shape[0]
+        return f"📊 Total leads in the last week: **{count}**"
+
+    elif "hot leads" in query and "last week" in query:
+        filtered = df[
+            (df['lead_score'].str.lower() == "hot") &
+            (df['booking_timestamp'] >= last_week) &
+            (df['booking_timestamp'] < today)
+        ]
+        count = filtered.shape[0]
+        return f"🔥 Hot leads last week: **{count}**"
+
+    elif "total conversions" in query:
+        count = df[df['action_status'].str.lower() == "converted"].shape[0]
+        return f"✅ Total conversions: **{count}**"
+
+    elif "leads lost" in query:
+        count = df[df['action_status'].str.lower() == "lost"].shape[0]
+        return f"❌ Leads marked as lost: **{count}**"
+
+    else:
+        return "❓ Sorry, I couldn't understand that question. Try asking about 'hot leads last week', 'total leads today', 'total conversions', etc."
+
+
 st.set_page_config(page_title="AOE Motors Test Drive Dashboard", layout="wide")
 st.title("🚗 AOE Motors Test Drive Bookings") # Keep this as the single main title
 st.markdown("---")
