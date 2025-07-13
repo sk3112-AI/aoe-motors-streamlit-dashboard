@@ -439,49 +439,17 @@ def set_expanded_lead(request_id):
         st.session_state.expanded_lead_id = None
     else:
         st.session_state.expanded_lead_id = request_id
-def interpret_and_query(query_text, df):
-    query = query_text.lower().strip()
-
-    if "total leads" in query and "today" in query:
-        today = pd.to_datetime("today").normalize()
-        count = df[df["booking_timestamp"] >= today].shape[0]
-        return f"📊 Total leads today: **{count}**"
-
-    elif "hot leads" in query and "last week" in query:
-        one_week_ago = pd.to_datetime("today") - pd.Timedelta(days=7)
-        count = df[(df["lead_score"] == "Hot") & (df["booking_timestamp"] >= one_week_ago)].shape[0]
-        return f"🔥 Hot leads in the last 7 days: **{count}**"
-
-    elif "total conversions" in query:
-        count = df[df["action_status"] == "Converted"].shape[0]
-        return f"✅ Total converted leads: **{count}**"
-
-    elif "leads lost" in query:
-        count = df[df["action_status"] == "Lost"].shape[0]
-        return f"❌ Total lost leads: **{count}**"
-
-    elif "warm" in query:
-        count = df[df["lead_score"] == "Warm"].shape[0]
-        return f"🟡 Total warm leads: **{count}**"
-
-    elif "cold" in query:
-        count = df[df["lead_score"] == "Cold"].shape[0]
-        return f"🧊 Total cold leads: **{count}**"
-
-    else:
-        return "🤖 Sorry, I couldn't understand the query. Try asking about total leads, hot leads, or conversions."
-
-
-# --- MAIN DASHBOARD DISPLAY LOGIC (STRICTLY AFTER ALL DEFINITIONS) ---
-
 
 def interpret_and_query(query_text, df):
     query = query_text.strip().lower()
-    today = pd.Timestamp.now().normalize()
+
+    # Ensure consistent timezone
+    now = pd.Timestamp.now(tz="UTC")
+    today = now.normalize()
     last_week = today - pd.Timedelta(days=7)
 
     if "total leads" in query and "today" in query:
-        count = df[df['booking_timestamp'].dt.date == today.date()].shape[0]
+        count = df[df['booking_timestamp'].dt.normalize() == today].shape[0]
         return f"📊 Total leads today: **{count}**"
 
     elif "total leads" in query and "last week" in query:
@@ -497,6 +465,14 @@ def interpret_and_query(query_text, df):
         count = filtered.shape[0]
         return f"🔥 Hot leads last week: **{count}**"
 
+    elif "warm leads" in query:
+        count = df[df['lead_score'].str.lower() == "warm"].shape[0]
+        return f"🟡 Total warm leads: **{count}**"
+
+    elif "cold leads" in query:
+        count = df[df['lead_score'].str.lower() == "cold"].shape[0]
+        return f"❄️ Total cold leads: **{count}**"
+
     elif "total conversions" in query:
         count = df[df['action_status'].str.lower() == "converted"].shape[0]
         return f"✅ Total conversions: **{count}**"
@@ -508,197 +484,5 @@ def interpret_and_query(query_text, df):
     else:
         return "❓ Sorry, I couldn't understand that question. Try asking about 'hot leads last week', 'total leads today', 'total conversions', etc."
 
-
-st.set_page_config(page_title="AOE Motors Test Drive Dashboard", layout="wide")
-st.title("🚗 AOE Motors Test Drive Bookings") # Keep this as the single main title
-st.markdown("---")
-
-# Initialize session state for expanded lead and messages
-if 'expanded_lead_id' not in st.session_state:
-    st.session_state.expanded_lead_id = None
-if 'info_message' not in st.session_state:
-    st.session_state.info_message = None
-if 'success_message' not in st.session_state:
-    st.session_state.success_message = None
-if 'error_message' not in st.session_state:
-    st.session_state.error_message = None
-
-# Display messages stored in session state
-if st.session_state.info_message:
-    st.info(st.session_state.info_message)
-    st.session_state.info_message = None
-if st.session_state.success_message:
-    st.success(st.session_state.success_message)
-    st.session_state.success_message = None
-if st.session_state.error_message:
-    st.error(st.session_state.error_message)
-    st.session_state.error_message = None
-
-
-# Filters Section
-st.sidebar.header("Filters")
-
-all_locations = ["All Locations", "New York", "Los Angeles", "Chicago", "Houston", "Miami"]
-selected_location = st.sidebar.selectbox("Filter by Location", all_locations)
-
-col_sidebar1, col_sidebar2 = st.sidebar.columns(2)
-with col_sidebar1:
-    start_date = st.date_input("Start Date (Booking Timestamp)", value=datetime.today().date())
-with col_sidebar2:
-    end_date = st.date_input("End Date (Booking Timestamp)", value=datetime.today().date() + timedelta(days=1))
-
-# Fetch all data needed for the dashboard with filters
-bookings_data = fetch_bookings_data(selected_location, start_date, end_date)
-
-if bookings_data:
-    df = pd.DataFrame(bookings_data)
-    df['booking_timestamp'] = pd.to_datetime(df['booking_timestamp'])
-    df = df.sort_values(by='booking_timestamp', ascending=False)
-
-    # --- Text-to-Query Section ---
-    st.subheader("Analytics - Ask a Question! 🤖")
-    query_text = st.text_input(
-        "Type your question (e.g., 'total leads today', 'hot leads last week', 'total conversions', 'leads lost'):",
-        key="nlq_query_input"
-    )
-    if query_text:
-        result_message = interpret_and_query(query_text, df)
-        st.markdown(result_message)
-    st.markdown("---")
-
-    for index, row in df.iterrows():
-        current_action = row['action_status']
-        current_numeric_lead_score = row.get('numeric_lead_score', 0)
-        current_lead_score_text = row.get('lead_score', "New")
-
-
-        available_actions = ACTION_STATUS_MAP.get(current_lead_score_text, ACTION_STATUS_MAP["New"])
-
-        expander_key = f"expander_{row['request_id']}"
-        is_expanded = (st.session_state.expanded_lead_id == row['request_id'])
-
-        with st.expander(
-            f"**{row['full_name']}** - {row['vehicle']} - Status: **{current_action}** (Score: {current_lead_score_text} - {current_numeric_lead_score} points)",
-            expanded=is_expanded
-        ):
-            st.button("Toggle Details", key=f"toggle_{row['request_id']}", on_click=set_expanded_lead, args=(row['request_id'],))
-
-            st.write(f"**Email:** {row['email']}")
-            st.write(f"**Location:** {row['location']}")
-            st.write(f"**Booking Date:** {row['booking_date']}")
-            st.write(f"**Booking Timestamp:** {row['booking_timestamp']}")
-            st.write(f"**Current Vehicle:** {row['current_vehicle'] if row['current_vehicle'] else 'N/A'}")
-            st.write(f"**Time Frame:** {row['time_frame']}")
-
-            st.markdown("---")
-
-            with st.form(key=f"update_form_{row['request_id']}"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    selected_action = st.selectbox(
-                        "Action Status",
-                        options=available_actions,
-                        index=available_actions.index(current_action) if current_action in available_actions else 0,
-                        key=f"action_status_{row['request_id']}"
-                    )
-                with col2:
-                    st.markdown(f"<div style='text-align: right;'>**Current Lead Score:** {current_lead_score_text} ({current_numeric_lead_score} points)</div>", unsafe_allow_html=True) 
-
-                is_sales_notes_editable = (selected_action == 'Follow Up Required')
-                new_sales_notes = st.text_area(
-                    "Sales Notes",
-                    value=row['sales_notes'] if row['sales_notes'] else "",
-                    key=f"sales_notes_{row['request_id']}",
-                    help="Add notes for follow-up, customer concerns, or other relevant details.",
-                    disabled=not is_sales_notes_editable
-                )
-
-                col_buttons = st.columns([1,1,2])
-
-                with col_buttons[0]:
-                    save_button = st.form_submit_button("Save Updates")
-
-                if selected_action == 'Follow Up Required':
-                    with col_buttons[1]:
-                        draft_email_button = st.form_submit_button("Draft Follow-up Email")
-
-            if save_button:
-                updates_made = False
-                if selected_action != current_action:
-                    update_booking_field(row['request_id'], 'action_status', selected_action)
-                    updates_made = True
-                if new_sales_notes != (row['sales_notes'] if row['sales_notes'] else ""):
-                    update_booking_field(row['request_id'], 'sales_notes', new_sales_notes)
-                    updates_made = True
-
-                if selected_action == 'Lost' and selected_action != current_action and ENABLE_EMAIL_SENDING:
-                    st.session_state.info_message = f"Customer {row['full_name']} marked as Lost. Sending 'Lost' email..."
-                    lost_subject, lost_body = generate_lost_email(row['full_name'], row['vehicle'])
-                    send_email(row['email'], lost_subject, lost_body) 
-                
-                elif selected_action == 'Converted' and selected_action != current_action and ENABLE_EMAIL_SENDING:
-                    st.session_state.info_message = f"Customer {row['full_name']} marked as Converted. Sending welcome email..."
-                    welcome_subject, welcome_body = generate_welcome_email(row['full_name'], row['vehicle'])
-                    send_email(row['email'], welcome_subject, welcome_body) 
-
-                if updates_made:
-                    st.session_state.expanded_lead_id = row['request_id'] 
-                    st.rerun()
-
-            if selected_action == 'Follow Up Required' and 'draft_email_button' in locals() and draft_email_button:
-                if new_sales_notes.strip() == "":
-                    st.warning("Sales notes are mandatory to draft a follow-up email.")
-                else:
-                    st.session_state.info_message = "Analyzing sales notes for relevance and sentiment..."
-                    notes_relevance = check_notes_relevance(new_sales_notes)
-
-                    if notes_relevance == "IRRELEVANT":
-                        st.warning("The sales notes provided are unclear or irrelevant. Please update the 'Sales Notes' with more descriptive information (e.g., specific customer concerns, positive feedback, or key discussion points) to enable the AI to draft a relevant email.")
-                        st.session_state.info_message = None 
-                    else:
-                        notes_sentiment = analyze_sentiment(new_sales_notes)
-                        
-                        vehicle_details = AOE_VEHICLE_DATA.get(row['vehicle'], {})
-                        current_vehicle_brand_val = row['current_vehicle'].split(' ')[0] if row['current_vehicle'] else None
-                        
-                        if vehicle_details:
-                            followup_subject, followup_body = generate_followup_email(
-                                row['full_name'], row['email'], row['vehicle'], new_sales_notes, vehicle_details,
-                                current_vehicle_brand=current_vehicle_brand_val,
-                                sentiment=notes_sentiment
-                            )
-                            if followup_subject and followup_body:
-                                st.session_state[f"draft_subject_{row['request_id']}"] = followup_subject
-                                st.session_state[f"draft_body_{row['request_id']}"] = followup_body
-                                st.session_state.expanded_lead_id = row['request_id']
-                                st.session_state.info_message = None 
-                                st.rerun()
-                            else:
-                                st.session_state.error_message = "Failed to draft email. Please check sales notes and try again."
-                                st.session_state.info_message = None 
-                        else:
-                            st.session_state.error_message = f"Vehicle details for {row['vehicle']} not found in hardcoded data. Cannot draft email."
-                            st.session_state.info_message = None 
-
-            if selected_action == 'Follow Up Required' and f"draft_subject_{row['request_id']}" in st.session_state and f"draft_body_{row['request_id']}" in st.session_state:
-                draft_subject = st.session_state[f"draft_subject_{row['request_id']}"]
-                draft_body = st.session_state[f"draft_body_{row['request_id']}"]
-
-                st.subheader("Review Drafted Email:")
-                edited_subject = st.text_input("Subject:", value=draft_subject, key=f"reviewed_subject_{row['request_id']}")
-                edited_body = st.text_area("Body:", value=draft_body, height=300, key=f"reviewed_body_{row['request_id']}")
-
-                if ENABLE_EMAIL_SENDING:
-                    if st.button(f"Click to Send Drafted Email to {row['full_name']}", key=f"send_draft_email_btn_{row['request_id']}"):
-                        if send_email(row['email'], edited_subject, edited_body):
-                            st.session_state.pop(f"draft_subject_{row['request_id']}", None)
-                            st.session_state.pop(f"draft_body_{row['request_id']}", None)
-                            st.session_state.expanded_lead_id = row['request_id']
-                            st.rerun()
-                else:
-                    st.warning("Email sending is not configured. Please add SMTP credentials to secrets.")
-
-else:
-    st.info("No test drive bookings to display yet. Submit a booking from your frontend!")
 
 st.markdown("---")
