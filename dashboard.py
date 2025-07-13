@@ -1,4 +1,11 @@
 import streamlit as st
+import logging
+logging.basicConfig(
+    filename="dashboard_debug.log",
+    level=logging.DEBUG,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logging.debug("Dashboard script started.")
 from supabase import create_client, Client
 import os
 from dotenv import load_dotenv
