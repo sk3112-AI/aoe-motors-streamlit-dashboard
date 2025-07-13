@@ -439,6 +439,37 @@ def set_expanded_lead(request_id):
         st.session_state.expanded_lead_id = None
     else:
         st.session_state.expanded_lead_id = request_id
+def interpret_and_query(query_text, df):
+    query = query_text.lower().strip()
+
+    if "total leads" in query and "today" in query:
+        today = pd.to_datetime("today").normalize()
+        count = df[df["booking_timestamp"] >= today].shape[0]
+        return f"📊 Total leads today: **{count}**"
+
+    elif "hot leads" in query and "last week" in query:
+        one_week_ago = pd.to_datetime("today") - pd.Timedelta(days=7)
+        count = df[(df["lead_score"] == "Hot") & (df["booking_timestamp"] >= one_week_ago)].shape[0]
+        return f"🔥 Hot leads in the last 7 days: **{count}**"
+
+    elif "total conversions" in query:
+        count = df[df["action_status"] == "Converted"].shape[0]
+        return f"✅ Total converted leads: **{count}**"
+
+    elif "leads lost" in query:
+        count = df[df["action_status"] == "Lost"].shape[0]
+        return f"❌ Total lost leads: **{count}**"
+
+    elif "warm" in query:
+        count = df[df["lead_score"] == "Warm"].shape[0]
+        return f"🟡 Total warm leads: **{count}**"
+
+    elif "cold" in query:
+        count = df[df["lead_score"] == "Cold"].shape[0]
+        return f"🧊 Total cold leads: **{count}**"
+
+    else:
+        return "🤖 Sorry, I couldn't understand the query. Try asking about total leads, hot leads, or conversions."
 
 
 # --- MAIN DASHBOARD DISPLAY LOGIC (STRICTLY AFTER ALL DEFINITIONS) ---
