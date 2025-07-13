@@ -14,7 +14,7 @@ import json
 
 load_dotenv()
 
-# --- Supabase Configuration ---
+# --- GLOBAL CONFIGURATIONS (ALL AT THE VERY TOP) ---
 supabase_url = os.getenv("SUPABASE_URL")
 supabase_key = os.getenv("SUPABASE_KEY")
 
@@ -93,7 +93,6 @@ AOE_TYPE_TO_COMPETITOR_SEGMENT_MAP = {
 }
 
 # Define fixed action status options based on lead score
-# MOVED TO TOP: This global variable needs to be defined before any functions or main logic use it
 ACTION_STATUS_MAP = {
     "Hot": ["New Lead", "Call Scheduled", "Follow Up Required", "Lost", "Converted"],
     "Warm": ["New Lead", "Call Scheduled", "Follow Up Required", "Lost", "Converted"],
@@ -101,14 +100,13 @@ ACTION_STATUS_MAP = {
     "New": ["New Lead", "Call Scheduled", "Follow Up Required", "Lost", "Converted"] # "New" leads not yet scored
 }
 
-# --- ALL FUNCTION DEFINITIONS (MOVED TO TOP FOR STREAMLIT COMPATIBILITY) ---
 
-# --- Function to Fetch Data from Supabase ---
+# --- ALL FUNCTION DEFINITIONS (STRICTLY AFTER CONFIGS AND BEFORE UI RENDERING) ---
+
 @st.cache_data(ttl=30)
 def fetch_bookings_data(location_filter=None, start_date_filter=None, end_date_filter=None):
     """Fetches all booking data from Supabase, with optional filters."""
     try:
-        # Fetch both lead_score (text) and numeric_lead_score
         query = supabase.from_(SUPABASE_TABLE_NAME).select(
             "request_id, full_name, email, vehicle, booking_date, current_vehicle, location, time_frame, action_status, sales_notes, lead_score, numeric_lead_score, booking_timestamp"
         ).order('booking_timestamp', desc=True)
@@ -116,10 +114,8 @@ def fetch_bookings_data(location_filter=None, start_date_filter=None, end_date_f
         if location_filter and location_filter != "All Locations":
             query = query.eq('location', location_filter)
         if start_date_filter:
-            # Ensure proper filtering for timestamp which is datetime
             query = query.gte('booking_timestamp', start_date_filter.isoformat())
         if end_date_filter:
-            # Add one day to end_date to include the entire end_date
             query = query.lte('booking_timestamp', (end_date_filter + timedelta(days=1)).isoformat())
 
         response = query.execute()
@@ -132,7 +128,6 @@ def fetch_bookings_data(location_filter=None, start_date_filter=None, end_date_f
         st.session_state.error_message = f"Error fetching data from Supabase: {e}"
         return []
 
-# --- Function to Update Data in Supabase ---
 def update_booking_field(request_id, field_name, new_value):
     """Updates a specific field for a booking in Supabase using request_id."""
     try:
@@ -145,7 +140,6 @@ def update_booking_field(request_id, field_name, new_value):
     except Exception as e:
         st.session_state.error_message = f"Error updating {field_name} in Supabase: {e}"
 
-# --- Function to Send Email ---
 def send_email(recipient_email, subject, body):
     if not ENABLE_EMAIL_SENDING:
         st.session_state.error_message = "Email sending is disabled. Credentials not fully configured."
@@ -165,7 +159,6 @@ def send_email(recipient_email, subject, body):
         st.session_state.error_message = f"Failed to send email: {e}"
         return False
 
-# --- New Function for AI Sentiment Analysis ---
 def analyze_sentiment(text):
     if not text.strip():
         return "NEUTRAL"
@@ -193,7 +186,6 @@ def analyze_sentiment(text):
         st.error(f"Error analyzing sentiment: {e}")
         return "NEUTRAL"
 
-# --- New Function for AI Relevance Check ---
 def check_notes_relevance(sales_notes):
     if not sales_notes.strip():
         return "IRRELEVANT"
@@ -229,7 +221,6 @@ def check_notes_relevance(sales_notes):
         st.error(f"Error checking notes relevance: {e}")
         return "IRRELEVANT"
 
-# --- Function to Generate Follow-up Email (AI) ---
 def generate_followup_email(customer_name, customer_email, vehicle_name, sales_notes, vehicle_details, current_vehicle_brand=None, sentiment=None):
     features_str = vehicle_details.get("features", "cutting-edge technology and a luxurious experience.")
     vehicle_type = vehicle_details.get("type", "vehicle")
@@ -410,7 +401,6 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
         st.error(f"Error drafting email with AI: {e}")
         return None, None
 
-# --- New Function to Generate "Lost" Email ---
 def generate_lost_email(customer_name, vehicle_name):
     subject = f"We Miss You, {customer_name}!"
     body = f"""Dear {customer_name},
@@ -422,7 +412,6 @@ AOE Motors Team
 """
     return subject, body
 
-# --- New Function to Generate "Converted" (Welcome) Email ---
 def generate_welcome_email(customer_name, vehicle_name):
     subject = f"Welcome to the AOE Family, {customer_name}!"
     body = f"""Dear {customer_name},
@@ -444,7 +433,7 @@ The AOE Motors Team
     return subject, body
 
 
-# --- Main Dashboard Display Logic (AFTER ALL FUNCTION DEFINITIONS) ---
+# --- MAIN DASHBOARD DISPLAY LOGIC (STRICTLY AFTER ALL DEFINITIONS) ---
 
 st.set_page_config(page_title="AOE Motors Test Drive Dashboard", layout="wide")
 st.title("🚗 AOE Motors Test Drive Bookings") # Keep this as the single main title
@@ -480,60 +469,46 @@ selected_location = st.sidebar.selectbox("Filter by Location", all_locations)
 
 col_sidebar1, col_sidebar2 = st.sidebar.columns(2)
 with col_sidebar1:
-    # MODIFIED: Set default value for Start Date to 30 days ago
-    start_date = st.date_input("Start Date (Booking Timestamp)", value=datetime.today().date() - timedelta(days=30))
+    # MODIFIED: Set default value for Start Date to TODAY's date
+    start_date = st.date_input("Start Date (Booking Timestamp)", value=datetime.today().date())
 with col_sidebar2:
     # MODIFIED: Set default value for End Date to today's date
     end_date = st.date_input("End Date (Booking Timestamp)", value=datetime.today().date())
 
 # Fetch all data needed for the dashboard with filters
-# This call is now correctly positioned AFTER all function definitions
 bookings_data = fetch_bookings_data(selected_location, start_date, end_date)
 
 if bookings_data:
     df = pd.DataFrame(bookings_data)
-    # Ensure booking_timestamp is datetime for proper filtering downstream in NLQ or general display
     df['booking_timestamp'] = pd.to_datetime(df['booking_timestamp'])
     df = df.sort_values(by='booking_timestamp', ascending=False)
 
     # --- Text-to-Query Section ---
-    # MODIFIED: Removed one duplicate title
     st.subheader("Analytics - Ask a Question! 🤖")
     query_text = st.text_input(
         "Type your question (e.g., 'total leads today', 'hot leads last week', 'total conversions', 'leads lost'):",
         key="nlq_query_input"
     )
     if query_text:
-        # Pass the full DataFrame for filtering within the function
         result_message = interpret_and_query(query_text, df)
         st.markdown(result_message)
     st.markdown("---")
 
-    def set_expanded_lead(request_id):
-        # This function will be triggered by the "Toggle Details" button
-        if st.session_state.expanded_lead_id == request_id:
-            st.session_state.expanded_lead_id = None
-        else:
-            st.session_state.expanded_lead_id = request_id
-
     for index, row in df.iterrows():
         current_action = row['action_status']
-        # Fetch numeric_lead_score as well
-        current_numeric_lead_score = row.get('numeric_lead_score', 0) # Default to 0 if not present
-        current_lead_score_text = row.get('lead_score', "New") # Default to "New" if not present
+        current_numeric_lead_score = row.get('numeric_lead_score', 0)
+        current_lead_score_text = row.get('lead_score', "New")
 
 
         available_actions = ACTION_STATUS_MAP.get(current_lead_score_text, ACTION_STATUS_MAP["New"])
 
         expander_key = f"expander_{row['request_id']}"
-        # Set expander state based on session_state, preserving state across reruns
         is_expanded = (st.session_state.expanded_lead_id == row['request_id'])
 
         with st.expander(
-            f"**{row['full_name']}** - {row['vehicle']} - Status: **{current_action}** (Score: {current_lead_score_text} - {current_numeric_lead_score} points)", # Display both
-            expanded=is_expanded # Use the is_expanded variable
+            f"**{row['full_name']}** - {row['vehicle']} - Status: **{current_action}** (Score: {current_lead_score_text} - {current_numeric_lead_score} points)",
+            expanded=is_expanded
         ):
-            # The "Toggle Details" button
             st.button("Toggle Details", key=f"toggle_{row['request_id']}", on_click=set_expanded_lead, args=(row['request_id'],))
 
             st.write(f"**Email:** {row['email']}")
@@ -555,12 +530,8 @@ if bookings_data:
                         key=f"action_status_{row['request_id']}"
                     )
                 with col2:
-                    # REMOVED: Lead Score dropdown - it's now dynamically updated by Edge Function
                     # MODIFIED: Shift current lead score display to the right for symmetry
                     st.markdown(f"<div style='text-align: right;'>**Current Lead Score:** {current_lead_score_text} ({current_numeric_lead_score} points)</div>", unsafe_allow_html=True) 
-                    # Use a dummy text_input to occupy space if needed, or adjust column widths more finely
-                    # st.text_input("Lead Score (Dynamic)", value=f"{current_lead_score_text} ({current_numeric_lead_score} points)", disabled=True, key=f"dummy_lead_score_{row['request_id']}")
-
 
                 is_sales_notes_editable = (selected_action == 'Follow Up Required')
                 new_sales_notes = st.text_area(
@@ -585,7 +556,6 @@ if bookings_data:
                 if selected_action != current_action:
                     update_booking_field(row['request_id'], 'action_status', selected_action)
                     updates_made = True
-                # REMOVED: Manual update for lead_score via dropdown. It's now driven by numeric score
                 if new_sales_notes != (row['sales_notes'] if row['sales_notes'] else ""):
                     update_booking_field(row['request_id'], 'sales_notes', new_sales_notes)
                     updates_made = True
@@ -601,11 +571,9 @@ if bookings_data:
                     send_email(row['email'], welcome_subject, welcome_body) 
 
                 if updates_made:
-                    # Preserve expanded state after form submission
                     st.session_state.expanded_lead_id = row['request_id'] 
                     st.rerun()
 
-            # Logic for drafting follow-up email (manual send)
             if selected_action == 'Follow Up Required' and 'draft_email_button' in locals() and draft_email_button:
                 if new_sales_notes.strip() == "":
                     st.warning("Sales notes are mandatory to draft a follow-up email.")
@@ -652,10 +620,8 @@ if bookings_data:
                 if ENABLE_EMAIL_SENDING:
                     if st.button(f"Click to Send Drafted Email to {row['full_name']}", key=f"send_draft_email_btn_{row['request_id']}"):
                         if send_email(row['email'], edited_subject, edited_body):
-                            # Clear draft specific session state variables
                             st.session_state.pop(f"draft_subject_{row['request_id']}", None)
                             st.session_state.pop(f"draft_body_{row['request_id']}", None)
-                            # Keep the lead expanded to show the updated status immediately
                             st.session_state.expanded_lead_id = row['request_id']
                             st.rerun()
                 else:
