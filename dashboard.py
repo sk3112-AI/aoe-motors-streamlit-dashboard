@@ -153,18 +153,15 @@ def send_email(recipient_email, subject, body):
     msg["To"] = recipient_email
     msg["Subject"] = subject
     msg.attach(MIMEText(body, "plain"))
-    try:
-        with smtplib.SMTP_SSL(email_host, email_port) as server:
-            logging.debug('Logging into SMTP server...')
-        server.login(email_address, email_password)
-            server.send_message(msg)
-        logging.info(f"Email successfully sent to {recipient_email}!")
-        st.session_state.success_message = f"Email successfully sent to {recipient_email}!"
-        return True
-    except Exception as e:
-        logging.error(f"Failed to send email: {e}", exc_info=True)
-        st.session_state.error_message = f"Failed to send email: {e}"
-        return False
+ try:
+    with smtplib.SMTP_SSL(email_host, email_port) as server:
+        logging.debug('Logging into SMTP server...')
+        server.login(email_host_user, email_host_password)
+        logging.debug('Sending email...')
+        server.send_message(msg)
+        logging.info("Email sent successfully.")
+except Exception as e:
+    logging.exception("Failed to send email: %s", e)
 
 def analyze_sentiment(text):
     if not text.strip():
