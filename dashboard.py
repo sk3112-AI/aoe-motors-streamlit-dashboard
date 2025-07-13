@@ -11,19 +11,20 @@ import time
 import requests
 from datetime import datetime, date, timedelta, timezone # ADDED timezone
 import json
-import logging
-import sys
+import logging # ADDED: Import logging module
+import sys # ADDED: Import sys for stdout
 
 load_dotenv()
 
-# --- Logging Setup ---
+# --- Logging Setup (ADDED) ---
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# --- GLOBAL CONFIGURATIONS ---
+# --- GLOBAL CONFIGURATIONS (ALL AT THE VERY TOP) ---
 supabase_url = os.getenv("SUPABASE_URL")
 supabase_key = os.getenv("SUPABASE_KEY")
 
 if not supabase_url or not supabase_key:
+    # Changed to logging.error and st.error
     logging.error("Supabase URL or Key not found. Please ensure they are set as environment variables (e.g., in Render Environment Variables or locally in a .env file).")
     st.error("Supabase URL or Key not found. Please ensure they are set as environment variables (e.g., in Render Environment Variables or locally in a .env file).")
     st.stop()
@@ -34,6 +35,7 @@ EMAIL_INTERACTIONS_TABLE_NAME = "email_interactions"
 
 openai_api_key = os.getenv("OPENAI_API_KEY")
 if not openai_api_key:
+    # Changed to logging.error and st.error
     logging.error("OpenAI API Key not found. Please ensure it is set as an environment variable (e.g., in Render Environment Variables or locally in a .env file).")
     st.error("OpenAI API Key not found. Please ensure it is set as an environment variable (e.g., in Render Environment Variables or locally in a .env file).")
     st.stop()
@@ -47,7 +49,7 @@ email_password = os.getenv("EMAIL_PASSWORD")
 
 ENABLE_EMAIL_SENDING = all([email_host, email_port, email_address, email_password])
 if not ENABLE_EMAIL_SENDING:
-    logging.warning("Email credentials not fully configured. Email sending will be disabled. Ensure all EMAIL_* variables are set.")
+    logging.warning("Email credentials not fully configured. Email sending will be disabled. Ensure all EMAIL_* variables are set.") # Changed to logging.warning
     st.warning("Email credentials not fully configured. Email sending will be disabled. Ensure all EMAIL_* variables are set.")
 
 BACKEND_API_URL = "https://aoe-agentic-demo.onrender.com"
@@ -453,25 +455,26 @@ def interpret_and_query(query_text, all_bookings_df):
 
     # Time zone conversion for current time (IST - Asia/Kolkata)
     # Ensure current time is also timezone-aware for comparison with timestampz
-    today_dt_utc = datetime.now(timezone.utc)
-    # The database stores timestampz, which is UTC. We will keep our comparison points in UTC.
-    # If the user asks for "today" in IST, the LLM prompt is configured to map to "TODAY",
-    # and then the comparison is made in UTC, which is fine as booking_timestamp is UTC.
+    today_dt_utc = datetime.now(timezone.utc) # This will be used as the base for UTC calculations
 
-    # This part can be further refined if we strictly need to display results converted to IST dates.
-    # For now, calculations are done effectively in UTC.
+    # Define various timeframes based on today_dt_utc
+    yesterday_dt_utc = today_dt_utc - timedelta(days=1)
+    last_week_start_dt_utc = today_dt_utc - timedelta(days=7)
+    last_month_start_dt_utc = today_dt_utc - timedelta(days=30)
+    last_year_start_dt_utc = today_dt_utc - timedelta(days=365)
+
 
     if not all_bookings_df.empty:
         # Ensure booking_timestamp is datetime for proper filtering
+        # And ensure it's converted to UTC for consistent comparison with today_dt_utc
         if not pd.api.types.is_datetime64_any_dtype(all_bookings_df['booking_timestamp']):
             all_bookings_df['booking_timestamp'] = pd.to_datetime(all_bookings_df['booking_timestamp'])
         
-        # Explicitly convert to UTC for consistent comparison if not already
+        # If naive, localize to UTC (assuming DB timestampz without explicit tzinfo is UTC)
+        # If already localized, convert to UTC for consistency
         if all_bookings_df['booking_timestamp'].dt.tz is None:
-            # If naive, assume it's UTC (as Supabase timestampz would be) and localize
             all_bookings_df['booking_timestamp'] = all_bookings_df['booking_timestamp'].dt.tz_localize('UTC')
         else:
-            # If already localized, convert to UTC for consistency
             all_bookings_df['booking_timestamp'] = all_bookings_df['booking_timestamp'].dt.tz_convert('UTC')
 
     # Define the types of queries the LLM can interpret
@@ -530,18 +533,15 @@ def interpret_and_query(query_text, all_bookings_df):
         if time_frame == "TODAY":
             filtered_df = filtered_df[filtered_df['booking_timestamp'].dt.date == today_dt_utc.date()]
         elif time_frame == "YESTERDAY":
-            yesterday_dt_utc = today_dt_utc - timedelta(days=1)
             filtered_df = filtered_df[filtered_df['booking_timestamp'].dt.date == yesterday_dt_utc.date()]
         elif time_frame == "LAST_WEEK":
-            last_week_start_dt_utc = today_dt_utc - timedelta(days=7)
             filtered_df = filtered_df[filtered_df['booking_timestamp'] >= last_week_start_dt_utc]
         elif time_frame == "LAST_MONTH":
-            last_month_start_dt_utc = today_dt_utc - timedelta(days=30)
             filtered_df = filtered_df[filtered_df['booking_timestamp'] >= last_month_start_dt_utc]
         elif time_frame == "LAST_YEAR":
-            last_year_start_dt_utc = today_dt_utc - timedelta(days=365)
             filtered_df = filtered_df[filtered_df['booking_timestamp'] >= last_year_start_dt_utc]
-        
+        # "ALL_TIME" means no date filter applied
+
         result_count = 0
         result_message = ""
 
@@ -574,7 +574,7 @@ def interpret_and_query(query_text, all_bookings_df):
 # --- MAIN DASHBOARD DISPLAY LOGIC (STRICTLY AFTER ALL DEFINITIONS) ---
 
 st.set_page_config(page_title="AOE Motors Test Drive Dashboard", layout="wide")
-st.title("🚗 AOE Motors Test Drive Bookings")
+st.title("🚗 AOE Motors Test Drive Bookings") # Keep this as the single main title
 st.markdown("---")
 
 # Initialize session state for expanded lead and messages
@@ -766,28 +766,3 @@ else:
     st.info("No test drive bookings to display yet. Submit a booking from your frontend!")
 
 st.markdown("---")
-}
-I have received and thoroughly analyzed the `dashboard.py` code you provided. This version appears to be **complete and contains the fix for the `TypeError: Invalid comparison between dtype=datetime64[ns, UTC] and Timestamp`**!
-
-Specifically, I can see that:
-* The truncation issue at the end of the `generate_welcome_email` function is resolved, and the file is complete.
-* Within the `interpret_and_query` function, `datetime.now()` is correctly initialized as timezone-aware UTC (`today_dt_utc = datetime.now(timezone.utc)`), and `timezone` is correctly imported from `datetime`. This ensures consistent timezone comparisons with your Supabase `booking_timestamp` data.
-
-This means this version of your `dashboard.py` code should resolve both the `SyntaxError` (due to truncation) and the `TypeError` related to datetime comparisons. It also maintains all previous fixes for `NameError`s and UI improvements.
-
-**Your next steps are crucial to ensure these fixes are live:**
-
-1.  **Replace your local `dashboard.py` file with this complete code.** Save it.
-2.  **Commit any uncommitted changes to your Git repository and push them.**
-    ```bash
-    git add .
-    git commit -m "Dashboard: Complete code, fixed TypeError and final syntax"
-    git push origin main
-    ```
-3.  **Go to your Render Dashboard** for your frontend Streamlit service.
-4.  Navigate to the **"Deploys" tab**.
-5.  Click **"Manual Deploy"** and select **"Clear build cache & Deploy"**. This is essential to ensure Render builds your application from this clean, complete version.
-6.  **Wait for the deployment process to complete 100% successfully.**
-7.  Once live, open your dashboard URL in your browser and perform a **hard refresh** (`Ctrl + Shift + R` or `Cmd + Shift + R`).
-
-After these steps, your dashboard should load correctly, and the analytics section should function as expected.
