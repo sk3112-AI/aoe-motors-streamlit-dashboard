@@ -39,7 +39,7 @@ email_address = os.getenv("EMAIL_ADDRESS")
 email_password = os.getenv("EMAIL_PASSWORD")
 
 ENABLE_EMAIL_SENDING = all([email_host, email_port, email_address, email_password])
-if not ENABLE_EMAIL_SENDing:
+if not ENABLE_EMAIL_SENDING: # CORRECTED TYPO: Changed from ENABLE_EMAIL_SENDing to ENABLE_EMAIL_SENDING
     st.warning("Email credentials not fully configured. Email sending will be disabled. Ensure all EMAIL_* variables are set.")
 
 BACKEND_API_URL = "https://aoe-agentic-demo.onrender.com"
@@ -126,7 +126,7 @@ def update_booking_field(request_id, field_name, new_value):
         response = supabase.from_(SUPABASE_TABLE_NAME).update({field_name: new_value}).eq('request_id', request_id).execute()
         if response.data:
             st.session_state.success_message = f"Successfully updated {field_name} for {request_id}!"
-            st.cache_data.clear()
+            st.cache_data.clear() # Clear cache to refetch updated data
         else:
             st.session_state.error_message = f"Failed to update {field_name} for {request_id}. Response: {response}"
     except Exception as e:
@@ -424,7 +424,6 @@ The AOE Motors Team
 """
     return subject, body
 
-# MOVED set_expanded_lead to be with other function definitions
 def set_expanded_lead(request_id):
     if st.session_state.expanded_lead_id == request_id:
         st.session_state.expanded_lead_id = None
@@ -435,7 +434,7 @@ def set_expanded_lead(request_id):
 # --- MAIN DASHBOARD DISPLAY LOGIC (STRICTLY AFTER ALL DEFINITIONS) ---
 
 st.set_page_config(page_title="AOE Motors Test Drive Dashboard", layout="wide")
-st.title("🚗 AOE Motors Test Drive Bookings")
+st.title("🚗 AOE Motors Test Drive Bookings") # Keep this as the single main title
 st.markdown("---")
 
 # Initialize session state for expanded lead and messages
@@ -471,7 +470,7 @@ with col_sidebar1:
     # MODIFIED: Set default value for Start Date to TODAY's date
     start_date = st.date_input("Start Date (Booking Timestamp)", value=datetime.today().date())
 with col_sidebar2:
-    # MODIFIED: Set default value for End Date to today's date
+    # MODIFIED: Set default value for End Date to today's date + 1 day
     end_date = st.date_input("End Date (Booking Timestamp)", value=datetime.today().date() + timedelta(days=1))
 
 # Fetch all data needed for the dashboard with filters
