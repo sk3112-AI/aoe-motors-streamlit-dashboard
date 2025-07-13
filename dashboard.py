@@ -92,6 +92,14 @@ AOE_TYPE_TO_COMPETITOR_SEGMENT_MAP = {
     "Performance SUV": "SUV"
 }
 
+# Define fixed action status options based on lead score
+# MOVED TO TOP: This global variable needs to be defined before any functions or main logic use it
+ACTION_STATUS_MAP = {
+    "Hot": ["New Lead", "Call Scheduled", "Follow Up Required", "Lost", "Converted"],
+    "Warm": ["New Lead", "Call Scheduled", "Follow Up Required", "Lost", "Converted"],
+    "Cold": ["New Lead", "Lost", "Converted"],
+    "New": ["New Lead", "Call Scheduled", "Follow Up Required", "Lost", "Converted"] # "New" leads not yet scored
+}
 
 # --- ALL FUNCTION DEFINITIONS (MOVED TO TOP FOR STREAMLIT COMPATIBILITY) ---
 
@@ -434,120 +442,6 @@ Sincerely,
 The AOE Motors Team
 """
     return subject, body
-
-
-# --- Text-to-Query (NLQ) Function ---
-@st.cache_data(ttl=60) # Cache LLM response for 60 seconds
-def interpret_and_query(query_text, all_bookings_df):
-    if not query_text.strip():
-        return "Please enter a query."
-
-    # Define the types of queries the LLM can interpret
-    # This JSON structure guides the LLM on expected output
-    prompt = f"""
-    Analyze the following user query and determine its type and any relevant timeframes.
-    Return a JSON object with 'query_type' and 'time_frame'.
-
-    QUERY_TYPES:
-    - "TOTAL_LEADS": User asks for the total number of leads.
-    - "HOT_LEADS": User asks for the number of hot leads.
-    - "CONVERTED_LEADS": User asks for the total number of converted leads (action_status is 'Converted').
-    - "LOST_LEADS": User asks for the total number of lost leads (action_status is 'Lost').
-    - "UNINTERPRETED": If the query does not fit any of the above types.
-
-    TIME_FRAMES (if applicable, otherwise default to "ALL_TIME"):
-    - "TODAY": Refers to today's date.
-    - "YESTERDAY": Refers to yesterday's date.
-    - "LAST_WEEK": Refers to the last 7 days from today.
-    - "LAST_MONTH": Refers to the last 30 days from today.
-    - "LAST_YEAR": Refers to the last 365 days from today.
-    - "ALL_TIME": Refers to all available data.
-
-    If the query type is "UNINTERPRETED", the 'time_frame' should also be "UNINTERPRETED".
-
-    User Query: "{query_text}"
-
-    JSON Output Example:
-    {{
-        "query_type": "TOTAL_LEADS",
-        "time_frame": "LAST_WEEK"
-    }}
-    """
-    
-    try:
-        with st.spinner("Interpreting query..."):
-            completion = openai_client.chat.completions.create(
-                model="gpt-3.5-turbo", # Consider "gpt-4o" for better accuracy if available
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant that interprets user queries about sales data and outputs a JSON object."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.0, # Keep low for deterministic JSON output
-                max_tokens=100,
-                response_format={"type": "json_object"}
-            )
-            response_json = json.loads(completion.choices[0].message.content.strip())
-            query_type = response_json.get("query_type")
-            time_frame = response_json.get("time_frame")
-
-        if query_type == "UNINTERPRETED":
-            return "This cannot be processed now - Restricted for demo. Please try queries like 'total leads today', 'hot leads last week', 'total conversions', or 'leads lost'."
-
-        # --- Perform Data Filtering and Calculation ---
-        filtered_df = all_bookings_df.copy()
-
-        # Ensure booking_timestamp is datetime for proper filtering
-        # The column might already be datetime if fetched from cache, but ensure.
-        if not pd.api.types.is_datetime64_any_dtype(filtered_df['booking_timestamp']):
-            filtered_df['booking_timestamp'] = pd.to_datetime(filtered_df['booking_timestamp'])
-
-        # Apply time filter first
-        today_dt = datetime.now()
-        
-        if time_frame == "TODAY":
-            # Compare date parts only
-            filtered_df = filtered_df[filtered_df['booking_timestamp'].dt.date == today_dt.date()]
-        elif time_frame == "YESTERDAY":
-            yesterday_dt = today_dt - timedelta(days=1)
-            filtered_df = filtered_df[filtered_df['booking_timestamp'].dt.date == yesterday_dt.date()]
-        elif time_frame == "LAST_WEEK":
-            last_week_start_dt = today_dt - timedelta(days=7)
-            filtered_df = filtered_df[filtered_df['booking_timestamp'] >= last_week_start_dt]
-        elif time_frame == "LAST_MONTH":
-            last_month_start_dt = today_dt - timedelta(days=30) # Approximate last month
-            filtered_df = filtered_df[filtered_df['booking_timestamp'] >= last_month_start_dt]
-        elif time_frame == "LAST_YEAR":
-            last_year_start_dt = today_dt - timedelta(days=365) # Approximate last year
-            filtered_df = filtered_df[filtered_df['booking_timestamp'] >= last_year_start_dt]
-        # "ALL_TIME" means no date filter applied
-
-        result_count = 0
-        result_message = ""
-
-        if query_type == "TOTAL_LEADS":
-            result_count = filtered_df.shape[0]
-            result_message = f"Total leads {time_frame.lower().replace('_', ' ')}: **{result_count}**"
-        elif query_type == "HOT_LEADS":
-            hot_leads_df = filtered_df[filtered_df['lead_score'] == 'Hot']
-            result_count = hot_leads_df.shape[0]
-            result_message = f"Number of Hot leads {time_frame.lower().replace('_', ' ')}: **{result_count}**"
-        elif query_type == "CONVERTED_LEADS":
-            converted_leads_df = filtered_df[filtered_df['action_status'] == 'Converted']
-            result_count = converted_leads_df.shape[0]
-            result_message = f"Total leads converted {time_frame.lower().replace('_', ' ')}: **{result_count}**"
-        elif query_type == "LOST_LEADS":
-            lost_leads_df = filtered_df[filtered_df['action_status'] == 'Lost']
-            result_count = lost_leads_df.shape[0]
-            result_message = f"Total leads lost {time_frame.lower().replace('_', ' ')}: **{result_count}**"
-        
-        return result_message
-
-    except json.JSONDecodeError:
-        return "LLM did not return a valid JSON. This cannot be processed now - Restricted for demo. Please try queries like 'total leads today', 'hot leads last week', 'total conversions', or 'leads lost'."
-    except Exception as e:
-        # Catch other potential errors, e.g., from LLM call or data processing
-        st.error(f"Error processing query: {e}")
-        return "An error occurred while processing your query. This cannot be processed now - Restricted for demo."
 
 
 # --- Main Dashboard Display Logic (AFTER ALL FUNCTION DEFINITIONS) ---
