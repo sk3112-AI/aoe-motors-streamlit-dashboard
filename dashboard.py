@@ -4,9 +4,8 @@ import os
 from dotenv import load_dotenv
 import pandas as pd
 from openai import OpenAI
-import smtplib # Keep this import if you still use smtplib elsewhere, otherwise remove
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart # Keep this if you still use it for other email aspects
+# Removed smtplib import here, as it's no longer used for sending email
+# Removed email.mime.text and email.mime.multipart as they are solely for smtplib
 import time
 import requests
 from datetime import datetime, date, timedelta, timezone
@@ -44,10 +43,11 @@ if not openai_api_key:
 openai_client = OpenAI(api_key=openai_api_key)
 
 # --- Email Configuration (NOW FOR SENDGRID) ---
-SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
-email_address = os.getenv("EMAIL_ADDRESS")
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY") # NEW: Get SendGrid API Key
+email_address = os.getenv("EMAIL_ADDRESS") # This will be your SendGrid verified sender email
 
-ENABLE_EMAIL_SENDING = all([SENDGRID_API_KEY, email_address])
+# Check if SendGrid is enabled
+ENABLE_EMAIL_SENDING = all([SENDGRID_API_KEY, email_address]) # MODIFIED: Check for SendGrid API key and sender email
 if not ENABLE_EMAIL_SENDING:
     logging.warning("SendGrid API Key or sender email not fully configured. Email sending will be disabled.")
     st.warning("Email sending is disabled. Please ensure SENDGRID_API_KEY and EMAIL_ADDRESS environment variables are set.")
@@ -157,7 +157,7 @@ def send_email(recipient_email, subject, body):
         from_email=email_address, # Your verified sender email
         to_emails=recipient_email,
         subject=subject,
-        html_content=body # Assuming body is HTML from AI generation, adjust if plain text
+        html_content=body # Ensure body is HTML with <p> tags for proper rendering
     )
     try:
         sendgrid_client = SendGridAPIClient(SENDGRID_API_KEY)
@@ -241,13 +241,27 @@ def check_notes_relevance(sales_notes):
         st.error(f"Error checking notes relevance: {e}")
         return "IRRELEVANT"
 
+# MODIFIED: generate_followup_email to request HTML and generate <p> tags
 def generate_followup_email(customer_name, customer_email, vehicle_name, sales_notes, vehicle_details, current_vehicle_brand=None, sentiment=None):
     features_str = vehicle_details.get("features", "cutting-edge technology and a luxurious experience.")
     vehicle_type = vehicle_details.get("type", "vehicle")
     powertrain = vehicle_details.get("powertrain", "advanced performance")
 
     comparison_context = ""
-    prompt_instructions = ""
+    # MODIFIED: Prompt instructions now explicitly ask for HTML with <p> tags
+    prompt_instructions = """
+    - Start with a polite greeting.
+    - Acknowledge their test drive or recent interaction.
+    - The entire email body MUST be composed of distinct HTML paragraph tags (<p>...</p>).
+    - Each logical section/paragraph MUST be entirely enclosed within its own <p> and </p> tags.
+    - Each paragraph (<p>...</p>) should be concise (typically 2-4 sentences maximum).
+    - Aim for a total of 5-7 distinct HTML paragraphs.
+    - DO NOT use \\n\\n for spacing; the <p> tags provide the necessary visual separation.
+    - DO NOT include any section dividers (like '---').
+    - Ensure there is no extra blank space before the first <p> tag or after the last </p> tag.
+    - Output the email body in valid HTML format.
+    - Separate Subject and Body with "Subject: " at the beginning of the subject line.
+    """
 
     ev_instructions = ""
     sales_notes_lower = sales_notes.lower()
@@ -292,7 +306,7 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
             The customer's current vehicle brand is Ford. The {vehicle_name} falls into the {aoe_segment_key} segment.
             A representative Ford model in this segment is the {ford_competitor['model_name']} with features: {ford_competitor['features']}.
             """
-            prompt_instructions = f"""
+            prompt_instructions += f"""
             - Start with a polite greeting.
             - Acknowledge their test drive.
             {sales_notes_incorporation_instruction}
