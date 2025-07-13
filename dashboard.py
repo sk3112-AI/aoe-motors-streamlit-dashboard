@@ -4,27 +4,30 @@ import os
 from dotenv import load_dotenv
 import pandas as pd
 from openai import OpenAI
-import smtplib
+import smtplib # Keep this import if you still use smtplib elsewhere, otherwise remove
 from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+from email.mime.multipart import MIMEMultipart # Keep this if you still use it for other email aspects
 import time
 import requests
-from datetime import datetime, date, timedelta, timezone # ADDED timezone
+from datetime import datetime, date, timedelta, timezone
 import json
-import logging # ADDED: Import logging module
-import sys # ADDED: Import sys for stdout
+import logging
+import sys
+
+# ADDED SendGrid imports
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 
 load_dotenv()
 
-# --- Logging Setup (ADDED) ---
+# --- Logging Setup ---
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# --- GLOBAL CONFIGURATIONS (ALL AT THE VERY TOP) ---
+# --- GLOBAL CONFIGURATIONS ---
 supabase_url = os.getenv("SUPABASE_URL")
 supabase_key = os.getenv("SUPABASE_KEY")
 
 if not supabase_url or not supabase_key:
-    # Changed to logging.error and st.error
     logging.error("Supabase URL or Key not found. Please ensure they are set as environment variables (e.g., in Render Environment Variables or locally in a .env file).")
     st.error("Supabase URL or Key not found. Please ensure they are set as environment variables (e.g., in Render Environment Variables or locally in a .env file).")
     st.stop()
@@ -35,22 +38,20 @@ EMAIL_INTERACTIONS_TABLE_NAME = "email_interactions"
 
 openai_api_key = os.getenv("OPENAI_API_KEY")
 if not openai_api_key:
-    # Changed to logging.error and st.error
     logging.error("OpenAI API Key not found. Please ensure it is set as an environment variable (e.g., in Render Environment Variables or locally in a .env file).")
     st.error("OpenAI API Key not found. Please ensure it is set as an environment variable (e.g., in Render Environment Variables or locally in a .env file).")
     st.stop()
 openai_client = OpenAI(api_key=openai_api_key)
 
-email_host = os.getenv("EMAIL_HOST")
-email_port_str = os.getenv("EMAIL_PORT")
-email_port = int(email_port_str) if email_port_str else 0
-email_address = os.getenv("EMAIL_ADDRESS")
-email_password = os.getenv("EMAIL_PASSWORD")
+# --- Email Configuration (NOW FOR SENDGRID) ---
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY") # NEW: Get SendGrid API Key
+email_address = os.getenv("EMAIL_ADDRESS") # This will be your SendGrid verified sender email
 
-ENABLE_EMAIL_SENDING = all([email_host, email_port, email_address, email_password])
+# Check if SendGrid is enabled
+ENABLE_EMAIL_SENDING = all([SENDGRID_API_KEY, email_address]) # MODIFIED: Check for SendGrid API key and sender email
 if not ENABLE_EMAIL_SENDING:
-    logging.warning("Email credentials not fully configured. Email sending will be disabled. Ensure all EMAIL_* variables are set.") # Changed to logging.warning
-    st.warning("Email credentials not fully configured. Email sending will be disabled. Ensure all EMAIL_* variables are set.")
+    logging.warning("SendGrid API Key or sender email not fully configured. Email sending will be disabled.")
+    st.warning("Email sending is disabled. Please ensure SENDGRID_API_KEY and EMAIL_ADDRESS environment variables are set.")
 
 BACKEND_API_URL = "https://aoe-agentic-demo.onrender.com"
 
@@ -146,26 +147,35 @@ def update_booking_field(request_id, field_name, new_value):
         logging.error(f"Error updating {field_name} in Supabase: {e}", exc_info=True)
         st.session_state.error_message = f"Error updating {field_name} in Supabase: {e}"
 
+# MODIFIED: send_email function to use SendGrid API
 def send_email(recipient_email, subject, body):
     if not ENABLE_EMAIL_SENDING:
-        logging.error("Email sending is disabled. Credentials not fully configured.")
-        st.session_state.error_message = "Email sending is disabled. Credentials not fully configured."
+        logging.error("SendGrid API Key or sender email not fully configured. Email sending is disabled.")
+        st.session_state.error_message = "Email sending is disabled. Please ensure SendGrid API Key and Sender Email are configured."
         return False
-    msg = MIMEMultipart()
-    msg["From"] = email_address
-    msg["To"] = recipient_email
-    msg["Subject"] = subject
-    msg.attach(MIMEText(body, "plain"))
+
+    message = Mail(
+        from_email=email_address, # Your verified sender email
+        to_emails=recipient_email,
+        subject=subject,
+        html_content=body # Assuming body is HTML from AI generation, adjust if plain text
+    )
     try:
-        with smtplib.SMTP_SSL(email_host, email_port) as server:
-            server.login(email_address, email_password)
-            server.send_message(msg)
-        logging.info(f"Email successfully sent to {recipient_email}!")
-        st.session_state.success_message = f"Email successfully sent to {recipient_email}!"
-        return True
+        sendgrid_client = SendGridAPIClient(SENDGRID_API_KEY)
+        response = sendgrid_client.send(message)
+        
+        # Check SendGrid's API response status code
+        if response.status_code >= 200 and response.status_code < 300:
+            logging.info(f"Email successfully sent via SendGrid to {recipient_email}! Status Code: {response.status_code}")
+            st.session_state.success_message = f"Email successfully sent to {recipient_email}!"
+            return True
+        else:
+            logging.error(f"Failed to send email via SendGrid. Status Code: {response.status_code}, Body: {response.body.decode('utf-8') if response.body else 'No body'}")
+            st.session_state.error_message = f"Failed to send email. SendGrid Status: {response.status_code}"
+            return False
     except Exception as e:
-        logging.error(f"Failed to send email: {e}", exc_info=True)
-        st.session_state.error_message = f"Failed to send email: {e}"
+        logging.error(f"Error sending email via SendGrid: {e}", exc_info=True)
+        st.session_state.error_message = f"Error sending email: {e}"
         return False
 
 def analyze_sentiment(text):
@@ -355,7 +365,6 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
         - Highlight the exciting nature of the AOE brand and the community they would join.
         - Mention AOE's comprehensive support system, including guidance on flexible financing options, dedicated sales support for any questions, and robust long-term service contracts, ensuring peace of mind throughout their ownership journey.
         - Instead of directly mentioning discounts, subtly hint at "tailored offers" or "value packages" that can be discussed with a sales representative to maximize their value, encouraging them to take the next step.
-        - Avoid explicitly discussing specific financing terms or pushing for immediate conversion in this email.
         """
     elif sentiment == "NEGATIVE":
         prompt_instructions += """
@@ -540,8 +549,7 @@ def interpret_and_query(query_text, all_bookings_df):
             filtered_df = filtered_df[filtered_df['booking_timestamp'] >= last_month_start_dt_utc]
         elif time_frame == "LAST_YEAR":
             filtered_df = filtered_df[filtered_df['booking_timestamp'] >= last_year_start_dt_utc]
-        # "ALL_TIME" means no date filter applied
-
+        
         result_count = 0
         result_message = ""
 
