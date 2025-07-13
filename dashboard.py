@@ -498,6 +498,61 @@ if bookings_data:
     df = pd.DataFrame(bookings_data)
     df['booking_timestamp'] = pd.to_datetime(df['booking_timestamp'])
     df = df.sort_values(by='booking_timestamp', ascending=False)
+# --- ANALYTICS: INTERPRET AND QUERY FUNCTION ---
+
+def interpret_and_query(query_text, df):
+    query_lower = query_text.lower()
+    now = pd.Timestamp.now()
+    
+    # Default to all-time
+    filtered_df = df.copy()
+    time_range_label = "All time"
+
+    if "today" in query_lower:
+        filtered_df = df[df['booking_timestamp'].dt.date == now.date()]
+        time_range_label = "Today"
+    elif "yesterday" in query_lower:
+        filtered_df = df[df['booking_timestamp'].dt.date == (now - pd.Timedelta(days=1)).date()]
+        time_range_label = "Yesterday"
+    elif "last week" in query_lower:
+        one_week_ago = now - pd.Timedelta(days=7)
+        filtered_df = df[df['booking_timestamp'] >= one_week_ago]
+        time_range_label = "Last 7 days"
+    elif "this week" in query_lower:
+        start_of_week = now - pd.Timedelta(days=now.weekday())
+        filtered_df = df[df['booking_timestamp'] >= start_of_week]
+        time_range_label = "This week"
+    elif "last month" in query_lower:
+        first_of_this_month = now.replace(day=1)
+        last_month = first_of_this_month - pd.DateOffset(months=1)
+        filtered_df = df[df['booking_timestamp'].dt.month == last_month.month]
+        time_range_label = "Last month"
+
+    if "converted" in query_lower:
+        count = filtered_df[filtered_df['action_status'].str.lower() == 'converted'].shape[0]
+        return f"{time_range_label} Converted Leads: **{count}**"
+
+    elif "hot leads" in query_lower:
+        count = filtered_df[filtered_df['lead_score'].str.lower() == 'hot'].shape[0]
+        return f"{time_range_label} Hot Leads: **{count}**"
+
+    elif "warm leads" in query_lower:
+        count = filtered_df[filtered_df['lead_score'].str.lower() == 'warm'].shape[0]
+        return f"{time_range_label} Warm Leads: **{count}**"
+
+    elif "cold leads" in query_lower:
+        count = filtered_df[filtered_df['lead_score'].str.lower() == 'cold'].shape[0]
+        return f"{time_range_label} Cold Leads: **{count}**"
+
+    elif "total leads" in query_lower or "how many leads" in query_lower:
+        count = filtered_df.shape[0]
+        return f"{time_range_label} Total Leads: **{count}**"
+
+    elif "lost" in query_lower:
+        count = filtered_df[filtered_df['action_status'].str.lower() == 'lost'].shape[0]
+        return f"{time_range_label} Lost Leads: **{count}**"
+
+    return "Sorry, I couldn't understand the query. Try something like 'converted last week', 'total leads today', or 'hot leads this week'."
 
     # --- Text-to-Query Section ---
     st.subheader("Analytics - Ask a Question! 🤖")
