@@ -146,25 +146,55 @@ def update_booking_field(request_id, field_name, new_value):
         logging.error(f"Error updating {field_name} in Supabase: {e}", exc_info=True) # Changed to logging.error
         st.session_state.error_message = f"Error updating {field_name} in Supabase: {e}"
 
+
 def send_email(recipient_email, subject, body):
     if not ENABLE_EMAIL_SENDING:
-        logging.error("Email sending is disabled. Credentials not fully configured.") # Added logging
+        logging.error("Email sending is disabled. Credentials not fully configured.")
         st.session_state.error_message = "Email sending is disabled. Credentials not fully configured."
         return False
+
     msg = MIMEMultipart()
     msg["From"] = email_address
     msg["To"] = recipient_email
     msg["Subject"] = subject
     msg.attach(MIMEText(body, "plain"))
+
     try:
-        with smtplib.SMTP_SSL(email_host, email_port) as server:
-            server.login(email_address, email_password)
-            server.send_message(msg)
-        logging.info(f"Email successfully sent to {recipient_email}!") # Added logging
+        # 1) Try SSL on the configured port
+        try:
+            logging.debug(f"Attempting SMTP_SSL connection to {email_host}:{email_port}")
+            server = smtplib.SMTP_SSL(email_host, email_port, timeout=10)
+        except OSError as ssl_err:
+            logging.warning(f"SMTP_SSL failed ({ssl_err}); falling back to STARTTLS on port 587")
+            # 2) Fallback to STARTTLS on 587
+            server = smtplib.SMTP(email_host, 587, timeout=10)
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+
+        server.login(email_address, email_password)
+        server.send_message(msg)
+        server.quit()
+
+        logging.info(f"Email successfully sent to {recipient_email}!")
         st.session_state.success_message = f"Email successfully sent to {recipient_email}!"
         return True
+
+    except OSError as net_err:
+        logging.error(f"Network error sending email: {net_err}", exc_info=True)
+        st.session_state.error_message = (
+            "Network error: Unable to reach SMTP server. "
+            "Check your network/VPC settings on Render and SMTP host/port."
+        )
+        return False
+
+    except smtplib.SMTPAuthenticationError as auth_err:
+        logging.error(f"SMTP authentication failed: {auth_err}", exc_info=True)
+        st.session_state.error_message = "SMTP authentication failed. Check EMAIL_ADDRESS and EMAIL_PASSWORD."
+        return False
+
     except Exception as e:
-        logging.error(f"Failed to send email: {e}", exc_info=True) # Changed to logging.error
+        logging.error(f"Failed to send email: {e}", exc_info=True)
         st.session_state.error_message = f"Failed to send email: {e}"
         return False
 
@@ -451,32 +481,6 @@ def set_expanded_lead(request_id):
         st.session_state.expanded_lead_id = request_id
 
 
-
-def interpret_and_query(query_text, df):
-    query_text = query_text.lower()
-
-    if "lost" in query_text:
-        lost_count = df[df['action_status'] == 'Lost'].shape[0]
-        return f"🔻 Total leads marked as **Lost**: `{lost_count}`"
-    elif "converted" in query_text or "conversion" in query_text:
-        converted_count = df[df['action_status'] == 'Converted'].shape[0]
-        return f"✅ Total leads **Converted**: `{converted_count}`"
-    elif "follow up" in query_text or "warm" in query_text:
-        warm_count = df[df['action_status'] == 'Follow Up Required'].shape[0]
-        return f"📬 Leads requiring **Follow-up**: `{warm_count}`"
-    elif "new" in query_text:
-        new_count = df[df['action_status'] == 'New Lead'].shape[0]
-        return f"🆕 Total **New Leads**: `{new_count}`"
-    elif "today" in query_text:
-        today = pd.Timestamp.now().normalize()
-        today_count = df[df['booking_timestamp'].dt.normalize() == today].shape[0]
-        return f"📅 Leads booked **Today**: `{today_count}`"
-    elif "all" in query_text or "total" in query_text:
-        total_count = df.shape[0]
-        return f"📊 Total Leads in filtered view: `{total_count}`"
-    else:
-        return "🤖 Sorry, I couldn’t understand that query. Try asking about 'leads lost', 'total conversions', or 'leads today'."
-
 # --- MAIN DASHBOARD DISPLAY LOGIC (STRICTLY AFTER ALL DEFINITIONS) ---
 
 st.set_page_config(page_title="AOE Motors Test Drive Dashboard", layout="wide")
@@ -507,6 +511,23 @@ if st.session_state.error_message:
 
 # Filters Section
 st.sidebar.header("Filters")
+
+# --- Test Email Button for SMTP Verification ---
+if ENABLE_EMAIL_SENDING:
+    if st.sidebar.button("Send Test Email"):
+        st.sidebar.info("Sending test email...")
+        success = send_email(
+            email_address,
+            "AOE Dashboard Test Email",
+            "This is a test email from your AOE Dashboard to verify SMTP settings."
+        )
+        if success:
+            st.sidebar.success("Test email sent successfully!")
+        else:
+            st.sidebar.error("Failed to send test email. Check logs and credentials.")
+else:
+    st.sidebar.warning("Email not configured. Cannot send test email.")
+
 
 all_locations = ["All Locations", "New York", "Los Angeles", "Chicago", "Houston", "Miami"]
 selected_location = st.sidebar.selectbox("Filter by Location", all_locations)
