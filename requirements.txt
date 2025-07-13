@@ -3,4 +3,16 @@ pandas
 requests
 python-dotenv
 openai
-supabase==2.16.0 
+supabase==2.16.0
+
+# SMTP & Email handling (comes with stdlib, but smtplib relies on these sometimes)
+email-validator
+
+# For error handling/logging
+loguru
+
+# For datetime/tz handling to prevent tz-naive/aware errors
+pytz
+
+# Optional - if you plan to use SendGrid HTTP API
+sendgrid
