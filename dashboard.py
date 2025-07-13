@@ -44,11 +44,10 @@ if not openai_api_key:
 openai_client = OpenAI(api_key=openai_api_key)
 
 # --- Email Configuration (NOW FOR SENDGRID) ---
-SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY") # NEW: Get SendGrid API Key
-email_address = os.getenv("EMAIL_ADDRESS") # This will be your SendGrid verified sender email
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+email_address = os.getenv("EMAIL_ADDRESS")
 
-# Check if SendGrid is enabled
-ENABLE_EMAIL_SENDING = all([SENDGRID_API_KEY, email_address]) # MODIFIED: Check for SendGrid API key and sender email
+ENABLE_EMAIL_SENDING = all([SENDGRID_API_KEY, email_address])
 if not ENABLE_EMAIL_SENDING:
     logging.warning("SendGrid API Key or sender email not fully configured. Email sending will be disabled.")
     st.warning("Email sending is disabled. Please ensure SENDGRID_API_KEY and EMAIL_ADDRESS environment variables are set.")
