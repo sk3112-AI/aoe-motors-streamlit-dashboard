@@ -11,14 +11,21 @@ import time
 import requests
 from datetime import datetime, date, timedelta
 import json
+import logging # ADDED: Import logging module
+import sys # ADDED: Import sys for stdout
 
 load_dotenv()
+
+# --- Logging Setup (ADDED) ---
+logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # --- GLOBAL CONFIGURATIONS (ALL AT THE VERY TOP) ---
 supabase_url = os.getenv("SUPABASE_URL")
 supabase_key = os.getenv("SUPABASE_KEY")
 
 if not supabase_url or not supabase_key:
+    # Changed to logging.error and st.error
+    logging.error("Supabase URL or Key not found. Please ensure they are set as environment variables (e.g., in Render Environment Variables or locally in a .env file).")
     st.error("Supabase URL or Key not found. Please ensure they are set as environment variables (e.g., in Render Environment Variables or locally in a .env file).")
     st.stop()
 
@@ -28,6 +35,8 @@ EMAIL_INTERACTIONS_TABLE_NAME = "email_interactions"
 
 openai_api_key = os.getenv("OPENAI_API_KEY")
 if not openai_api_key:
+    # Changed to logging.error and st.error
+    logging.error("OpenAI API Key not found. Please ensure it is set as an environment variable (e.g., in Render Environment Variables or locally in a .env file).")
     st.error("OpenAI API Key not found. Please ensure it is set as an environment variable (e.g., in Render Environment Variables or locally in a .env file).")
     st.stop()
 openai_client = OpenAI(api_key=openai_api_key)
@@ -39,7 +48,8 @@ email_address = os.getenv("EMAIL_ADDRESS")
 email_password = os.getenv("EMAIL_PASSWORD")
 
 ENABLE_EMAIL_SENDING = all([email_host, email_port, email_address, email_password])
-if not ENABLE_EMAIL_SENDING: # CORRECTED TYPO: Changed from ENABLE_EMAIL_SENDing to ENABLE_EMAIL_SENDING
+if not ENABLE_EMAIL_SENDING:
+    logging.warning("Email credentials not fully configured. Email sending will be disabled. Ensure all EMAIL_* variables are set.") # Changed to logging.warning
     st.warning("Email credentials not fully configured. Email sending will be disabled. Ensure all EMAIL_* variables are set.")
 
 BACKEND_API_URL = "https://aoe-agentic-demo.onrender.com"
@@ -117,6 +127,7 @@ def fetch_bookings_data(location_filter=None, start_date_filter=None, end_date_f
         else:
             return []
     except Exception as e:
+        logging.error(f"Error fetching data from Supabase: {e}", exc_info=True) # Changed to logging.error
         st.session_state.error_message = f"Error fetching data from Supabase: {e}"
         return []
 
@@ -125,15 +136,19 @@ def update_booking_field(request_id, field_name, new_value):
     try:
         response = supabase.from_(SUPABASE_TABLE_NAME).update({field_name: new_value}).eq('request_id', request_id).execute()
         if response.data:
+            logging.info(f"Successfully updated {field_name} for {request_id}!") # Added logging
             st.session_state.success_message = f"Successfully updated {field_name} for {request_id}!"
             st.cache_data.clear() # Clear cache to refetch updated data
         else:
+            logging.error(f"Failed to update {field_name} for {request_id}. Response: {response}") # Added logging
             st.session_state.error_message = f"Failed to update {field_name} for {request_id}. Response: {response}"
     except Exception as e:
+        logging.error(f"Error updating {field_name} in Supabase: {e}", exc_info=True) # Changed to logging.error
         st.session_state.error_message = f"Error updating {field_name} in Supabase: {e}"
 
 def send_email(recipient_email, subject, body):
     if not ENABLE_EMAIL_SENDING:
+        logging.error("Email sending is disabled. Credentials not fully configured.") # Added logging
         st.session_state.error_message = "Email sending is disabled. Credentials not fully configured."
         return False
     msg = MIMEMultipart()
@@ -145,9 +160,11 @@ def send_email(recipient_email, subject, body):
         with smtplib.SMTP_SSL(email_host, email_port) as server:
             server.login(email_address, email_password)
             server.send_message(msg)
+        logging.info(f"Email successfully sent to {recipient_email}!") # Added logging
         st.session_state.success_message = f"Email successfully sent to {recipient_email}!"
         return True
     except Exception as e:
+        logging.error(f"Failed to send email: {e}", exc_info=True) # Changed to logging.error
         st.session_state.error_message = f"Failed to send email: {e}"
         return False
 
@@ -175,6 +192,7 @@ def analyze_sentiment(text):
             return sentiment
         return "NEUTRAL"
     except Exception as e:
+        logging.error(f"Error analyzing sentiment: {e}", exc_info=True) # Changed to logging.error
         st.error(f"Error analyzing sentiment: {e}")
         return "NEUTRAL"
 
@@ -210,6 +228,7 @@ def check_notes_relevance(sales_notes):
             return relevance
         return "IRRELEVANT"
     except Exception as e:
+        logging.error(f"Error checking notes relevance: {e}", exc_info=True) # Changed to logging.error
         st.error(f"Error checking notes relevance: {e}")
         return "IRRELEVANT"
 
@@ -390,6 +409,7 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
                 body_content = draft
             return subject_line, body_content
     except Exception as e:
+        logging.error(f"Error drafting email with AI: {e}", exc_info=True) # Changed to logging.error
         st.error(f"Error drafting email with AI: {e}")
         return None, None
 
@@ -467,10 +487,8 @@ selected_location = st.sidebar.selectbox("Filter by Location", all_locations)
 
 col_sidebar1, col_sidebar2 = st.sidebar.columns(2)
 with col_sidebar1:
-    # MODIFIED: Set default value for Start Date to TODAY's date
     start_date = st.date_input("Start Date (Booking Timestamp)", value=datetime.today().date())
 with col_sidebar2:
-    # MODIFIED: Set default value for End Date to today's date + 1 day
     end_date = st.date_input("End Date (Booking Timestamp)", value=datetime.today().date() + timedelta(days=1))
 
 # Fetch all data needed for the dashboard with filters
