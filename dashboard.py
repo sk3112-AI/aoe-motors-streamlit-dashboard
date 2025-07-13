@@ -451,6 +451,32 @@ def set_expanded_lead(request_id):
         st.session_state.expanded_lead_id = request_id
 
 
+
+def interpret_and_query(query_text, df):
+    query_text = query_text.lower()
+
+    if "lost" in query_text:
+        lost_count = df[df['action_status'] == 'Lost'].shape[0]
+        return f"🔻 Total leads marked as **Lost**: `{lost_count}`"
+    elif "converted" in query_text or "conversion" in query_text:
+        converted_count = df[df['action_status'] == 'Converted'].shape[0]
+        return f"✅ Total leads **Converted**: `{converted_count}`"
+    elif "follow up" in query_text or "warm" in query_text:
+        warm_count = df[df['action_status'] == 'Follow Up Required'].shape[0]
+        return f"📬 Leads requiring **Follow-up**: `{warm_count}`"
+    elif "new" in query_text:
+        new_count = df[df['action_status'] == 'New Lead'].shape[0]
+        return f"🆕 Total **New Leads**: `{new_count}`"
+    elif "today" in query_text:
+        today = pd.Timestamp.now().normalize()
+        today_count = df[df['booking_timestamp'].dt.normalize() == today].shape[0]
+        return f"📅 Leads booked **Today**: `{today_count}`"
+    elif "all" in query_text or "total" in query_text:
+        total_count = df.shape[0]
+        return f"📊 Total Leads in filtered view: `{total_count}`"
+    else:
+        return "🤖 Sorry, I couldn’t understand that query. Try asking about 'leads lost', 'total conversions', or 'leads today'."
+
 # --- MAIN DASHBOARD DISPLAY LOGIC (STRICTLY AFTER ALL DEFINITIONS) ---
 
 st.set_page_config(page_title="AOE Motors Test Drive Dashboard", layout="wide")
@@ -500,40 +526,7 @@ if bookings_data:
     df = df.sort_values(by='booking_timestamp', ascending=False)
 
     # --- Text-to-Query Section ---
-    
-def interpret_and_query(query_text, df):
-    query_text = query_text.lower()
-
-    if "lost" in query_text:
-        lost_count = df[df['action_status'] == 'Lost'].shape[0]
-        return f"🔻 Total leads marked as **Lost**: `{lost_count}`"
-    
-    elif "converted" in query_text or "conversion" in query_text:
-        converted_count = df[df['action_status'] == 'Converted'].shape[0]
-        return f"✅ Total leads **Converted**: `{converted_count}`"
-    
-    elif "follow up" in query_text or "warm" in query_text:
-        warm_count = df[df['action_status'] == 'Follow Up Required'].shape[0]
-        return f"📬 Leads requiring **Follow-up**: `{warm_count}`"
-    
-    elif "new" in query_text:
-        new_count = df[df['action_status'] == 'New Lead'].shape[0]
-        return f"🆕 Total **New Leads**: `{new_count}`"
-    
-    elif "today" in query_text:
-        today = pd.Timestamp.now().normalize()
-        today_count = df[df['booking_timestamp'].dt.normalize() == today].shape[0]
-        return f"📅 Leads booked **Today**: `{today_count}`"
-    
-    elif "all" in query_text or "total" in query_text:
-        total_count = df.shape[0]
-        return f"📊 Total Leads in filtered view: `{total_count}`"
-    
-    else:
-        return "🤖 Sorry, I couldn’t understand that query. Try asking about 'leads lost', 'total conversions', or 'leads today'."
-
-
-st.subheader("Analytics - Ask a Question! 🤖")
+    st.subheader("Analytics - Ask a Question! 🤖")
     query_text = st.text_input(
         "Type your question (e.g., 'total leads today', 'hot leads last week', 'total conversions', 'leads lost'):",
         key="nlq_query_input"
