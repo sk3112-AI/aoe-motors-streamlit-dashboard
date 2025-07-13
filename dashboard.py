@@ -11,21 +11,14 @@ import time
 import requests
 from datetime import datetime, date, timedelta
 import json
-import logging # ADDED: Import logging module
-import sys # ADDED: Import sys for stdout
 
 load_dotenv()
-
-# --- Logging Setup (ADDED) ---
-logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # --- GLOBAL CONFIGURATIONS (ALL AT THE VERY TOP) ---
 supabase_url = os.getenv("SUPABASE_URL")
 supabase_key = os.getenv("SUPABASE_KEY")
 
 if not supabase_url or not supabase_key:
-    # Changed to logging.error and st.error
-    logging.error("Supabase URL or Key not found. Please ensure they are set as environment variables (e.g., in Render Environment Variables or locally in a .env file).")
     st.error("Supabase URL or Key not found. Please ensure they are set as environment variables (e.g., in Render Environment Variables or locally in a .env file).")
     st.stop()
 
@@ -35,8 +28,6 @@ EMAIL_INTERACTIONS_TABLE_NAME = "email_interactions"
 
 openai_api_key = os.getenv("OPENAI_API_KEY")
 if not openai_api_key:
-    # Changed to logging.error and st.error
-    logging.error("OpenAI API Key not found. Please ensure it is set as an environment variable (e.g., in Render Environment Variables or locally in a .env file).")
     st.error("OpenAI API Key not found. Please ensure it is set as an environment variable (e.g., in Render Environment Variables or locally in a .env file).")
     st.stop()
 openai_client = OpenAI(api_key=openai_api_key)
@@ -49,7 +40,6 @@ email_password = os.getenv("EMAIL_PASSWORD")
 
 ENABLE_EMAIL_SENDING = all([email_host, email_port, email_address, email_password])
 if not ENABLE_EMAIL_SENDING:
-    logging.warning("Email credentials not fully configured. Email sending will be disabled. Ensure all EMAIL_* variables are set.") # Changed to logging.warning
     st.warning("Email credentials not fully configured. Email sending will be disabled. Ensure all EMAIL_* variables are set.")
 
 BACKEND_API_URL = "https://aoe-agentic-demo.onrender.com"
@@ -127,7 +117,7 @@ def fetch_bookings_data(location_filter=None, start_date_filter=None, end_date_f
         else:
             return []
     except Exception as e:
-        logging.error(f"Error fetching data from Supabase: {e}", exc_info=True) # Changed to logging.error
+        logging.error(f"Error fetching data from Supabase: {e}", exc_info=True)
         st.session_state.error_message = f"Error fetching data from Supabase: {e}"
         return []
 
@@ -136,19 +126,19 @@ def update_booking_field(request_id, field_name, new_value):
     try:
         response = supabase.from_(SUPABASE_TABLE_NAME).update({field_name: new_value}).eq('request_id', request_id).execute()
         if response.data:
-            logging.info(f"Successfully updated {field_name} for {request_id}!") # Added logging
+            logging.info(f"Successfully updated {field_name} for {request_id}!")
             st.session_state.success_message = f"Successfully updated {field_name} for {request_id}!"
-            st.cache_data.clear() # Clear cache to refetch updated data
+            st.cache_data.clear()
         else:
-            logging.error(f"Failed to update {field_name} for {request_id}. Response: {response}") # Added logging
+            logging.error(f"Failed to update {field_name} for {request_id}. Response: {response}")
             st.session_state.error_message = f"Failed to update {field_name} for {request_id}. Response: {response}"
     except Exception as e:
-        logging.error(f"Error updating {field_name} in Supabase: {e}", exc_info=True) # Changed to logging.error
+        logging.error(f"Error updating {field_name} in Supabase: {e}", exc_info=True)
         st.session_state.error_message = f"Error updating {field_name} in Supabase: {e}"
 
 def send_email(recipient_email, subject, body):
     if not ENABLE_EMAIL_SENDING:
-        logging.error("Email sending is disabled. Credentials not fully configured.") # Added logging
+        logging.error("Email sending is disabled. Credentials not fully configured.")
         st.session_state.error_message = "Email sending is disabled. Credentials not fully configured."
         return False
     msg = MIMEMultipart()
@@ -160,11 +150,11 @@ def send_email(recipient_email, subject, body):
         with smtplib.SMTP_SSL(email_host, email_port) as server:
             server.login(email_address, email_password)
             server.send_message(msg)
-        logging.info(f"Email successfully sent to {recipient_email}!") # Added logging
+        logging.info(f"Email successfully sent to {recipient_email}!")
         st.session_state.success_message = f"Email successfully sent to {recipient_email}!"
         return True
     except Exception as e:
-        logging.error(f"Failed to send email: {e}", exc_info=True) # Changed to logging.error
+        logging.error(f"Failed to send email: {e}", exc_info=True)
         st.session_state.error_message = f"Failed to send email: {e}"
         return False
 
@@ -192,7 +182,7 @@ def analyze_sentiment(text):
             return sentiment
         return "NEUTRAL"
     except Exception as e:
-        logging.error(f"Error analyzing sentiment: {e}", exc_info=True) # Changed to logging.error
+        logging.error(f"Error analyzing sentiment: {e}", exc_info=True)
         st.error(f"Error analyzing sentiment: {e}")
         return "NEUTRAL"
 
@@ -228,7 +218,7 @@ def check_notes_relevance(sales_notes):
             return relevance
         return "IRRELEVANT"
     except Exception as e:
-        logging.error(f"Error checking notes relevance: {e}", exc_info=True) # Changed to logging.error
+        logging.error(f"Error checking notes relevance: {e}", exc_info=True)
         st.error(f"Error checking notes relevance: {e}")
         return "IRRELEVANT"
 
@@ -409,7 +399,7 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
                 body_content = draft
             return subject_line, body_content
     except Exception as e:
-        logging.error(f"Error drafting email with AI: {e}", exc_info=True) # Changed to logging.error
+        logging.error(f"Error drafting email with AI: {e}", exc_info=True)
         st.error(f"Error drafting email with AI: {e}")
         return None, None
 
@@ -498,61 +488,6 @@ if bookings_data:
     df = pd.DataFrame(bookings_data)
     df['booking_timestamp'] = pd.to_datetime(df['booking_timestamp'])
     df = df.sort_values(by='booking_timestamp', ascending=False)
-# --- ANALYTICS: INTERPRET AND QUERY FUNCTION ---
-
-def interpret_and_query(query_text, df):
-    query_lower = query_text.lower()
-    now = pd.Timestamp.now()
-    
-    # Default to all-time
-    filtered_df = df.copy()
-    time_range_label = "All time"
-
-    if "today" in query_lower:
-        filtered_df = df[df['booking_timestamp'].dt.date == now.date()]
-        time_range_label = "Today"
-    elif "yesterday" in query_lower:
-        filtered_df = df[df['booking_timestamp'].dt.date == (now - pd.Timedelta(days=1)).date()]
-        time_range_label = "Yesterday"
-    elif "last week" in query_lower:
-        one_week_ago = now - pd.Timedelta(days=7)
-        filtered_df = df[df['booking_timestamp'] >= one_week_ago]
-        time_range_label = "Last 7 days"
-    elif "this week" in query_lower:
-        start_of_week = now - pd.Timedelta(days=now.weekday())
-        filtered_df = df[df['booking_timestamp'] >= start_of_week]
-        time_range_label = "This week"
-    elif "last month" in query_lower:
-        first_of_this_month = now.replace(day=1)
-        last_month = first_of_this_month - pd.DateOffset(months=1)
-        filtered_df = df[df['booking_timestamp'].dt.month == last_month.month]
-        time_range_label = "Last month"
-
-    if "converted" in query_lower:
-        count = filtered_df[filtered_df['action_status'].str.lower() == 'converted'].shape[0]
-        return f"{time_range_label} Converted Leads: **{count}**"
-
-    elif "hot leads" in query_lower:
-        count = filtered_df[filtered_df['lead_score'].str.lower() == 'hot'].shape[0]
-        return f"{time_range_label} Hot Leads: **{count}**"
-
-    elif "warm leads" in query_lower:
-        count = filtered_df[filtered_df['lead_score'].str.lower() == 'warm'].shape[0]
-        return f"{time_range_label} Warm Leads: **{count}**"
-
-    elif "cold leads" in query_lower:
-        count = filtered_df[filtered_df['lead_score'].str.lower() == 'cold'].shape[0]
-        return f"{time_range_label} Cold Leads: **{count}**"
-
-    elif "total leads" in query_lower or "how many leads" in query_lower:
-        count = filtered_df.shape[0]
-        return f"{time_range_label} Total Leads: **{count}**"
-
-    elif "lost" in query_lower:
-        count = filtered_df[filtered_df['action_status'].str.lower() == 'lost'].shape[0]
-        return f"{time_range_label} Lost Leads: **{count}**"
-
-    return "Sorry, I couldn't understand the query. Try something like 'converted last week', 'total leads today', or 'hot leads this week'."
 
     # --- Text-to-Query Section ---
     st.subheader("Analytics - Ask a Question! 🤖")
