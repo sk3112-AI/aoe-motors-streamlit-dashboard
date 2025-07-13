@@ -9,16 +9,22 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import time
 import requests
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone # ADDED timezone
 import json
+import logging
+import sys
 
 load_dotenv()
 
-# --- GLOBAL CONFIGURATIONS (ALL AT THE VERY TOP) ---
+# --- Logging Setup ---
+logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+
+# --- GLOBAL CONFIGURATIONS ---
 supabase_url = os.getenv("SUPABASE_URL")
 supabase_key = os.getenv("SUPABASE_KEY")
 
 if not supabase_url or not supabase_key:
+    logging.error("Supabase URL or Key not found. Please ensure they are set as environment variables (e.g., in Render Environment Variables or locally in a .env file).")
     st.error("Supabase URL or Key not found. Please ensure they are set as environment variables (e.g., in Render Environment Variables or locally in a .env file).")
     st.stop()
 
@@ -28,6 +34,7 @@ EMAIL_INTERACTIONS_TABLE_NAME = "email_interactions"
 
 openai_api_key = os.getenv("OPENAI_API_KEY")
 if not openai_api_key:
+    logging.error("OpenAI API Key not found. Please ensure it is set as an environment variable (e.g., in Render Environment Variables or locally in a .env file).")
     st.error("OpenAI API Key not found. Please ensure it is set as an environment variable (e.g., in Render Environment Variables or locally in a .env file).")
     st.stop()
 openai_client = OpenAI(api_key=openai_api_key)
@@ -40,6 +47,7 @@ email_password = os.getenv("EMAIL_PASSWORD")
 
 ENABLE_EMAIL_SENDING = all([email_host, email_port, email_address, email_password])
 if not ENABLE_EMAIL_SENDING:
+    logging.warning("Email credentials not fully configured. Email sending will be disabled. Ensure all EMAIL_* variables are set.")
     st.warning("Email credentials not fully configured. Email sending will be disabled. Ensure all EMAIL_* variables are set.")
 
 BACKEND_API_URL = "https://aoe-agentic-demo.onrender.com"
@@ -93,7 +101,7 @@ ACTION_STATUS_MAP = {
 }
 
 
-# --- ALL FUNCTION DEFINITIONS (STRICTLY AFTER CONFIGS AND BEFORE UI RENDERING) ---
+# --- ALL FUNCTION DEFINITIONS ---
 
 @st.cache_data(ttl=30)
 def fetch_bookings_data(location_filter=None, start_date_filter=None, end_date_filter=None):
@@ -439,43 +447,134 @@ def set_expanded_lead(request_id):
         st.session_state.expanded_lead_id = None
     else:
         st.session_state.expanded_lead_id = request_id
-def interpret_and_query(query_text, df):
+
+def interpret_and_query(query_text, all_bookings_df):
     query = query_text.lower().strip()
 
-    if "total leads" in query and "today" in query:
-        today = pd.to_datetime("today").normalize()
-        count = df[df["booking_timestamp"] >= today].shape[0]
-        return f"📊 Total leads today: **{count}**"
+    # Time zone conversion for current time (IST - Asia/Kolkata)
+    # Ensure current time is also timezone-aware for comparison with timestampz
+    today_dt_utc = datetime.now(timezone.utc)
+    # The database stores timestampz, which is UTC. We will keep our comparison points in UTC.
+    # If the user asks for "today" in IST, the LLM prompt is configured to map to "TODAY",
+    # and then the comparison is made in UTC, which is fine as booking_timestamp is UTC.
 
-    elif "hot leads" in query and "last week" in query:
-        one_week_ago = pd.to_datetime("today") - pd.Timedelta(days=7)
-        count = df[(df["lead_score"] == "Hot") & (df["booking_timestamp"] >= one_week_ago)].shape[0]
-        return f"🔥 Hot leads in the last 7 days: **{count}**"
+    # This part can be further refined if we strictly need to display results converted to IST dates.
+    # For now, calculations are done effectively in UTC.
 
-    elif "total conversions" in query:
-        count = df[df["action_status"] == "Converted"].shape[0]
-        return f"✅ Total converted leads: **{count}**"
+    if not all_bookings_df.empty:
+        # Ensure booking_timestamp is datetime for proper filtering
+        if not pd.api.types.is_datetime64_any_dtype(all_bookings_df['booking_timestamp']):
+            all_bookings_df['booking_timestamp'] = pd.to_datetime(all_bookings_df['booking_timestamp'])
+        
+        # Explicitly convert to UTC for consistent comparison if not already
+        if all_bookings_df['booking_timestamp'].dt.tz is None:
+            # If naive, assume it's UTC (as Supabase timestampz would be) and localize
+            all_bookings_df['booking_timestamp'] = all_bookings_df['booking_timestamp'].dt.tz_localize('UTC')
+        else:
+            # If already localized, convert to UTC for consistency
+            all_bookings_df['booking_timestamp'] = all_bookings_df['booking_timestamp'].dt.tz_convert('UTC')
 
-    elif "leads lost" in query:
-        count = df[df["action_status"] == "Lost"].shape[0]
-        return f"❌ Total lost leads: **{count}**"
+    # Define the types of queries the LLM can interpret
+    prompt = f"""
+    Analyze the following user query and determine its type and any relevant timeframes.
+    Return a JSON object with 'query_type' and 'time_frame'.
 
-    elif "warm" in query:
-        count = df[df["lead_score"] == "Warm"].shape[0]
-        return f"🟡 Total warm leads: **{count}**"
+    QUERY_TYPES:
+    - "TOTAL_LEADS": User asks for the total number of leads.
+    - "HOT_LEADS": User asks for the number of hot leads.
+    - "CONVERTED_LEADS": User asks for the total number of converted leads (action_status is 'Converted').
+    - "LOST_LEADS": User asks for the total number of lost leads (action_status is 'Lost').
+    - "UNINTERPRETED": If the query does not fit any of the above types.
 
-    elif "cold" in query:
-        count = df[df["lead_score"] == "Cold"].shape[0]
-        return f"🧊 Total cold leads: **{count}**"
+    TIME_FRAMES (if applicable, otherwise default to "ALL_TIME"):
+    - "TODAY": Refers to today's date.
+    - "YESTERDAY": Refers to yesterday's date.
+    - "LAST_WEEK": Refers to the last 7 days from today.
+    - "LAST_MONTH": Refers to the last 30 days from today.
+    - "LAST_YEAR": Refers to the last 365 days from today.
+    - "ALL_TIME": Refers to all available data.
 
-    else:
-        return "🤖 Sorry, I couldn't understand the query. Try asking about total leads, hot leads, or conversions."
+    If the query type is "UNINTERPRETED", the 'time_frame' should also be "UNINTERPRETED".
+
+    User Query: "{query_text}"
+
+    JSON Output Example:
+    {{
+        "query_type": "TOTAL_LEADS",
+        "time_frame": "LAST_WEEK"
+    }}
+    """
+    
+    try:
+        with st.spinner("Interpreting query..."):
+            completion = openai_client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that interprets user queries about sales data and outputs a JSON object."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.0,
+                max_tokens=100,
+                response_format={"type": "json_object"}
+            )
+            response_json = json.loads(completion.choices[0].message.content.strip())
+            query_type = response_json.get("query_type")
+            time_frame = response_json.get("time_frame")
+
+        if query_type == "UNINTERPRETED":
+            return "This cannot be processed now - Restricted for demo. Please try queries like 'total leads today', 'hot leads last week', 'total conversions', or 'leads lost'."
+
+        filtered_df = all_bookings_df.copy()
+
+        # Apply time filter based on UTC dates for consistency with DB
+        if time_frame == "TODAY":
+            filtered_df = filtered_df[filtered_df['booking_timestamp'].dt.date == today_dt_utc.date()]
+        elif time_frame == "YESTERDAY":
+            yesterday_dt_utc = today_dt_utc - timedelta(days=1)
+            filtered_df = filtered_df[filtered_df['booking_timestamp'].dt.date == yesterday_dt_utc.date()]
+        elif time_frame == "LAST_WEEK":
+            last_week_start_dt_utc = today_dt_utc - timedelta(days=7)
+            filtered_df = filtered_df[filtered_df['booking_timestamp'] >= last_week_start_dt_utc]
+        elif time_frame == "LAST_MONTH":
+            last_month_start_dt_utc = today_dt_utc - timedelta(days=30)
+            filtered_df = filtered_df[filtered_df['booking_timestamp'] >= last_month_start_dt_utc]
+        elif time_frame == "LAST_YEAR":
+            last_year_start_dt_utc = today_dt_utc - timedelta(days=365)
+            filtered_df = filtered_df[filtered_df['booking_timestamp'] >= last_year_start_dt_utc]
+        
+        result_count = 0
+        result_message = ""
+
+        if query_type == "TOTAL_LEADS":
+            result_count = filtered_df.shape[0]
+            result_message = f"Total leads {time_frame.lower().replace('_', ' ')}: **{result_count}**"
+        elif query_type == "HOT_LEADS":
+            hot_leads_df = filtered_df[filtered_df['lead_score'] == 'Hot']
+            result_count = hot_leads_df.shape[0]
+            result_message = f"Number of Hot leads {time_frame.lower().replace('_', ' ')}: **{result_count}**"
+        elif query_type == "CONVERTED_LEADS":
+            converted_leads_df = filtered_df[filtered_df['action_status'] == 'Converted']
+            result_count = converted_leads_df.shape[0]
+            result_message = f"Total leads converted {time_frame.lower().replace('_', ' ')}: **{result_count}**"
+        elif query_type == "LOST_LEADS":
+            lost_leads_df = filtered_df[filtered_df['action_status'] == 'Lost']
+            result_count = lost_leads_df.shape[0]
+            result_message = f"Total leads lost {time_frame.lower().replace('_', ' ')}: **{result_count}**"
+        
+        return result_message
+
+    except json.JSONDecodeError:
+        logging.error("LLM did not return a valid JSON.", exc_info=True)
+        return "LLM did not return a valid JSON. This cannot be processed now - Restricted for demo. Please try queries like 'total leads today', 'hot leads last week', 'total conversions', or 'leads lost'."
+    except Exception as e:
+        logging.error(f"Error processing query: {e}", exc_info=True)
+        return "An error occurred while processing your query. This cannot be processed now - Restricted for demo."
 
 
 # --- MAIN DASHBOARD DISPLAY LOGIC (STRICTLY AFTER ALL DEFINITIONS) ---
 
 st.set_page_config(page_title="AOE Motors Test Drive Dashboard", layout="wide")
-st.title("🚗 AOE Motors Test Drive Bookings") # Keep this as the single main title
+st.title("🚗 AOE Motors Test Drive Bookings")
 st.markdown("---")
 
 # Initialize session state for expanded lead and messages
@@ -667,3 +766,28 @@ else:
     st.info("No test drive bookings to display yet. Submit a booking from your frontend!")
 
 st.markdown("---")
+}
+I have received and thoroughly analyzed the `dashboard.py` code you provided. This version appears to be **complete and contains the fix for the `TypeError: Invalid comparison between dtype=datetime64[ns, UTC] and Timestamp`**!
+
+Specifically, I can see that:
+* The truncation issue at the end of the `generate_welcome_email` function is resolved, and the file is complete.
+* Within the `interpret_and_query` function, `datetime.now()` is correctly initialized as timezone-aware UTC (`today_dt_utc = datetime.now(timezone.utc)`), and `timezone` is correctly imported from `datetime`. This ensures consistent timezone comparisons with your Supabase `booking_timestamp` data.
+
+This means this version of your `dashboard.py` code should resolve both the `SyntaxError` (due to truncation) and the `TypeError` related to datetime comparisons. It also maintains all previous fixes for `NameError`s and UI improvements.
+
+**Your next steps are crucial to ensure these fixes are live:**
+
+1.  **Replace your local `dashboard.py` file with this complete code.** Save it.
+2.  **Commit any uncommitted changes to your Git repository and push them.**
+    ```bash
+    git add .
+    git commit -m "Dashboard: Complete code, fixed TypeError and final syntax"
+    git push origin main
+    ```
+3.  **Go to your Render Dashboard** for your frontend Streamlit service.
+4.  Navigate to the **"Deploys" tab**.
+5.  Click **"Manual Deploy"** and select **"Clear build cache & Deploy"**. This is essential to ensure Render builds your application from this clean, complete version.
+6.  **Wait for the deployment process to complete 100% successfully.**
+7.  Once live, open your dashboard URL in your browser and perform a **hard refresh** (`Ctrl + Shift + R` or `Cmd + Shift + R`).
+
+After these steps, your dashboard should load correctly, and the analytics section should function as expected.
