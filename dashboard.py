@@ -904,6 +904,7 @@ if bookings_data:
                 with col_buttons_form[0]:
                     save_button = st.form_submit_button("Save Updates")
 
+                # The Draft Email button remains inside the form
                 if selected_action == 'Follow Up Required':
                     with col_buttons_form[1]:
                         draft_email_button = st.form_submit_button("Draft Follow-up Email")
@@ -911,19 +912,21 @@ if bookings_data:
             # --- START AI BUTTONS OUTSIDE THE FORM ---
             # These buttons are not tied to the form submission,
             # allowing immediate actions without saving other form inputs.
-            # State variables to track button clicks outside the form, initialized once per expander
-            if f'offer_button_clicked_{row["request_id"]}' not in st.session_state:
-                st.session_state[f'offer_button_clicked_{row["request_id"]}'] = False
-            if f'talking_points_button_clicked_{row["request_id"]}' not in st.session_state:
-                st.session_state[f'talking_points_button_clicked_{row["request_id"]}'] = False
+            # Initialize session state keys for each button click status for this row
+            offer_button_clicked_key = f'offer_button_clicked_{row["request_id"]}'
+            talking_points_button_clicked_key = f'talking_points_button_clicked_{row["request_id"]}'
+
+            if offer_button_clicked_key not in st.session_state:
+                st.session_state[offer_button_clicked_key] = False
+            if talking_points_button_clicked_key not in st.session_state:
+                st.session_state[talking_points_button_clicked_key] = False
             
             ai_buttons_cols = st.columns([1,1]) # Create new columns for these two buttons outside the form
 
             with ai_buttons_cols[0]:
                 if selected_action not in ['Lost', 'Converted']: # Only show if not Lost/Converted
-                    # This is now a regular st.button
                     if st.button("Suggest Offer (AI)", key=f"suggest_offer_btn_outside_{row['request_id']}"):
-                        st.session_state[f'offer_button_clicked_{row["request_id"]}'] = True # Set clicked state for this specific row
+                        st.session_state[offer_button_clicked_key] = True # Set clicked state for this specific row
                         st.session_state.expanded_lead_id = row['request_id'] # Keep expanded
                         st.rerun() # Immediately rerun to process click
                 else:
@@ -931,9 +934,8 @@ if bookings_data:
 
             with ai_buttons_cols[1]:
                 if selected_action == 'Call Scheduled': # Only show if status is Call Scheduled
-                    # This is now a regular st.button
                     if st.button("Generate Talking Points (AI)", key=f"generate_talking_points_btn_outside_{row['request_id']}"):
-                        st.session_state[f'talking_points_button_clicked_{row["request_id"]}'] = True # Set clicked state for this specific row
+                        st.session_state[talking_points_button_clicked_key] = True # Set clicked state for this specific row
                         st.session_state.expanded_lead_id = row['request_id'] # Keep expanded
                         st.rerun() # Immediately rerun
             # --- END AI BUTTONS OUTSIDE THE FORM ---
@@ -980,14 +982,16 @@ if bookings_data:
                         current_vehicle_brand_val = row['current_vehicle'].split(' ')[0] if row['current_vehicle'] else None
                         
                         if vehicle_details:
-                            followup_subject, followup_body = generate_followup_email(
+                            # draft_subject and draft_body will be Markdown from now on
+                            followup_subject, followup_body_markdown = generate_followup_email( # Renamed for clarity
                                 row['full_name'], row['email'], row['vehicle'], new_sales_notes, vehicle_details,
                                 current_vehicle_brand=current_vehicle_brand_val,
                                 sentiment=notes_sentiment
                             )
-                            if followup_subject and followup_body:
+                            if followup_subject and followup_body_markdown:
                                 st.session_state[f"draft_subject_{row['request_id']}"] = followup_subject
-                                st.session_state[f"draft_body_{row['request_id']}"] = followup_body
+                                # Store Markdown in session state for UI display
+                                st.session_state[f"draft_body_{row['request_id']}"] = followup_body_markdown
                                 st.session_state.expanded_lead_id = row['request_id']
                                 st.session_state.info_message = None 
                                 st.rerun()
@@ -1000,15 +1004,24 @@ if bookings_data:
 
             if selected_action == 'Follow Up Required' and f"draft_subject_{row['request_id']}" in st.session_state and f"draft_body_{row['request_id']}" in st.session_state:
                 draft_subject = st.session_state[f"draft_subject_{row['request_id']}"]
-                draft_body = st.session_state[f"draft_body_{row['request_id']}"]
+                # Retrieve Markdown body for UI display
+                draft_body_markdown = st.session_state[f"draft_body_{row['request_id']}"]
 
                 st.subheader("Review Drafted Email:")
                 edited_subject = st.text_input("Subject:", value=draft_subject, key=f"reviewed_subject_{row['request_id']}")
-                edited_body = st.text_area("Body:", value=draft_body, height=300, key=f"reviewed_body_{row['request_id']}")
+                
+                # MODIFIED: Use st.markdown for displaying draft body for readability
+                st.markdown("**Body (Review Draft):**") # Label for markdown display
+                st.markdown(draft_body_markdown, unsafe_allow_html=True) # Render markdown here
+                
+                # Hidden text area to capture edits, if desired (currently disabled)
+                # You can make this editable_body below visible for editing if needed
+                edited_body_html_for_sending = md_converter.render(draft_body_markdown) # Convert Markdown to HTML for sending
 
                 if ENABLE_EMAIL_SENDING:
+                    # Send button will use the converted HTML
                     if st.button(f"Click to Send Drafted Email to {row['full_name']}", key=f"send_draft_email_btn_{row['request_id']}"):
-                        if send_email(row['email'], edited_subject, edited_body, request_id=row['request_id'], event_type="email_followup_sent"):
+                        if send_email(row['email'], edited_subject, edited_body_html_for_sending, request_id=row['request_id'], event_type="email_followup_sent"):
                             st.session_state.pop(f"draft_subject_{row['request_id']}", None)
                             st.session_state.pop(f"draft_body_{row['request_id']}", None)
                             st.session_state.expanded_lead_id = row['request_id']
@@ -1017,7 +1030,7 @@ if bookings_data:
                     st.warning("Email sending is not configured. Please add SMTP credentials to secrets.")
 
             # NEW: Logic for Dynamic Offer Suggestion (triggered by button_clicked from outside form)
-            if st.session_state.get(f'offer_button_clicked_{row["request_id"]}', False): # Check session state
+            if st.session_state.get(offer_button_clicked_key, False): # Check session state for click
                 st.session_state.info_message = "Generating personalized offer suggestion..."
                 offer_suggestion_details = {
                     "customer_name": row['full_name'],
@@ -1031,7 +1044,7 @@ if bookings_data:
                 st.session_state[f"suggested_offer_{row['request_id']}"] = suggested_offer_text
                 st.session_state.expanded_lead_id = row['request_id'] # Keep expanded
                 st.session_state.info_message = None # Clear info message
-                st.session_state[f'offer_button_clicked_{row["request_id"]}'] = False # Reset click state
+                st.session_state[offer_button_clicked_key] = False # Reset click state
                 st.rerun()
             
             # Display suggested offer if available in session state
@@ -1042,7 +1055,7 @@ if bookings_data:
 
 
             # NEW: Logic for Talking Points (triggered by button_clicked from outside form)
-            if st.session_state.get(f'talking_points_button_clicked_{row["request_id"]}', False): # Check session state
+            if st.session_state.get(talking_points_button_clicked_key, False): # Check session state for click
                 st.session_state.info_message = "Generating talking points..."
                 talking_points_details = {
                     "customer_name": row['full_name'],
@@ -1056,7 +1069,7 @@ if bookings_data:
                 st.session_state[f"call_talking_points_{row['request_id']}"] = generated_points
                 st.session_state.expanded_lead_id = row['request_id']
                 st.session_state.info_message = None
-                st.session_state[f'talking_points_button_clicked_{row["request_id"]}'] = False # Reset click state
+                st.session_state[talking_points_button_clicked_key] = False # Reset click state
                 st.rerun()
             
             # Display talking points if available in session state
