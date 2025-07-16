@@ -869,14 +869,16 @@ if bookings_data:
                 )
 
                 col_buttons = st.columns([1,1,1,1]) # Expanded columns for more buttons
+               
+               # NEW: Draft Follow-up Email Button (outside form for responsiveness)
+               draft_email_button_clicked = False
+               if selected_action == 'Follow Up Required':
+               if st.button("Draft Follow-up Email", key=f"draft_email_btn_outside_{row['request_id']}"):
+               draft_email_button_clicked = True
 
                 with col_buttons[0]:
                     save_button = st.form_submit_button("Save Updates")
-
-                if selected_action == 'Follow Up Required':
-                    with col_buttons[1]:
-                        draft_email_button = st.form_submit_button("Draft Follow-up Email")
-                
+                            
                 # NEW: Dynamic Offer Suggestion button (moved inside form and made conditional)
                 # This button will only appear if selected_action is NOT 'Lost' or 'Converted'
                 if selected_action not in ['Lost', 'Converted']: # Only show if not Lost/Converted
@@ -914,7 +916,7 @@ if bookings_data:
                     st.rerun()
 
             # EXISTING: Logic for drafting follow-up email (manual send)
-            if selected_action == 'Follow Up Required' and 'draft_email_button' in locals() and draft_email_button:
+            if selected_action == 'Follow Up Required' and draft_email_button_clicked:
                 if new_sales_notes.strip() == "":
                     st.warning("Sales notes are mandatory to draft a follow-up email.")
                 else:
