@@ -633,7 +633,6 @@ def generate_call_talking_points(lead_details: dict, vehicle_data: dict) -> str:
     except Exception as e:
         logging.error(f"Error generating talking points: {e}", exc_info=True)
         return "Error generating talking points. Please try again."
-
 def interpret_and_query(query_text, all_bookings_df):
     query = query_text.lower().strip()
 
@@ -789,7 +788,6 @@ def interpret_and_query(query_text, all_bookings_df):
     except Exception as e:
         logging.error(f"Error processing query: {e}", exc_info=True)
         return "An error occurred while processing your query. This cannot be processed now - Restricted for demo."
-
 
 # --- MAIN DASHBOARD DISPLAY LOGIC (STRICTLY AFTER ALL DEFINITIONS) ---
 
