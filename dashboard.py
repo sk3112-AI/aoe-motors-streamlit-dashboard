@@ -16,7 +16,7 @@ from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 
 # ADDED markdown_it for Markdown to HTML conversion
-import markdown_it
+import markdown_it # Ensure 'markdown-it-py' is in your requirements.txt
 
 # Initialize MarkdownIt parser for converting AI output to HTML
 md_converter = markdown_it.MarkdownIt()
@@ -899,38 +899,43 @@ if bookings_data:
                     disabled=not is_sales_notes_editable
                 )
 
-                col_buttons = st.columns([1,1,1,1]) # Expanded columns for more buttons
+                col_buttons_form = st.columns([1,1]) # Use col_buttons_form for buttons INSIDE the form
 
-                with col_buttons[0]:
+                with col_buttons_form[0]:
                     save_button = st.form_submit_button("Save Updates")
 
                 if selected_action == 'Follow Up Required':
-                    with col_buttons[1]:
+                    with col_buttons_form[1]:
                         draft_email_button = st.form_submit_button("Draft Follow-up Email")
                 
             # --- START AI BUTTONS OUTSIDE THE FORM ---
             # These buttons are not tied to the form submission,
             # allowing immediate actions without saving other form inputs.
-            # State variables to track button clicks outside the form
-            offer_button_clicked = False
-            generate_talking_points_button_clicked = False # Corrected variable name
-
+            # State variables to track button clicks outside the form, initialized once per expander
+            if f'offer_button_clicked_{row["request_id"]}' not in st.session_state:
+                st.session_state[f'offer_button_clicked_{row["request_id"]}'] = False
+            if f'talking_points_button_clicked_{row["request_id"]}' not in st.session_state:
+                st.session_state[f'talking_points_button_clicked_{row["request_id"]}'] = False
+            
             ai_buttons_cols = st.columns([1,1]) # Create new columns for these two buttons outside the form
 
             with ai_buttons_cols[0]:
                 if selected_action not in ['Lost', 'Converted']: # Only show if not Lost/Converted
                     # This is now a regular st.button
                     if st.button("Suggest Offer (AI)", key=f"suggest_offer_btn_outside_{row['request_id']}"):
-                        offer_button_clicked = True
+                        st.session_state[f'offer_button_clicked_{row["request_id"]}'] = True # Set clicked state for this specific row
+                        st.session_state.expanded_lead_id = row['request_id'] # Keep expanded
+                        st.rerun() # Immediately rerun to process click
                 else:
-                    # Display message if status is Lost or Converted
-                    st.info("Offer suggestion not applicable for this status.")
+                    st.info("Offer suggestion not applicable for this status.") # Display message if not applicable
 
             with ai_buttons_cols[1]:
                 if selected_action == 'Call Scheduled': # Only show if status is Call Scheduled
                     # This is now a regular st.button
                     if st.button("Generate Talking Points (AI)", key=f"generate_talking_points_btn_outside_{row['request_id']}"):
-                        generate_talking_points_button_clicked = True
+                        st.session_state[f'talking_points_button_clicked_{row["request_id"]}'] = True # Set clicked state for this specific row
+                        st.session_state.expanded_lead_id = row['request_id'] # Keep expanded
+                        st.rerun() # Immediately rerun
             # --- END AI BUTTONS OUTSIDE THE FORM ---
 
 
@@ -1012,7 +1017,7 @@ if bookings_data:
                     st.warning("Email sending is not configured. Please add SMTP credentials to secrets.")
 
             # NEW: Logic for Dynamic Offer Suggestion (triggered by button_clicked from outside form)
-            if offer_button_clicked: # Check if offer_button was clicked
+            if st.session_state.get(f'offer_button_clicked_{row["request_id"]}', False): # Check session state
                 st.session_state.info_message = "Generating personalized offer suggestion..."
                 offer_suggestion_details = {
                     "customer_name": row['full_name'],
@@ -1026,6 +1031,7 @@ if bookings_data:
                 st.session_state[f"suggested_offer_{row['request_id']}"] = suggested_offer_text
                 st.session_state.expanded_lead_id = row['request_id'] # Keep expanded
                 st.session_state.info_message = None # Clear info message
+                st.session_state[f'offer_button_clicked_{row["request_id"]}'] = False # Reset click state
                 st.rerun()
             
             # Display suggested offer if available in session state
@@ -1036,7 +1042,7 @@ if bookings_data:
 
 
             # NEW: Logic for Talking Points (triggered by button_clicked from outside form)
-            if talking_points_button_clicked: # Check if button was clicked
+            if st.session_state.get(f'talking_points_button_clicked_{row["request_id"]}', False): # Check session state
                 st.session_state.info_message = "Generating talking points..."
                 talking_points_details = {
                     "customer_name": row['full_name'],
@@ -1050,6 +1056,7 @@ if bookings_data:
                 st.session_state[f"call_talking_points_{row['request_id']}"] = generated_points
                 st.session_state.expanded_lead_id = row['request_id']
                 st.session_state.info_message = None
+                st.session_state[f'talking_points_button_clicked_{row["request_id"]}'] = False # Reset click state
                 st.rerun()
             
             # Display talking points if available in session state
