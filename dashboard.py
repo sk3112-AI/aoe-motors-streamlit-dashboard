@@ -4,8 +4,6 @@ import os
 from dotenv import load_dotenv
 import pandas as pd
 from openai import OpenAI
-# Removed smtplib import as it's replaced by SendGrid
-# Removed email.mime.text and email.mime.multipart as they are solely for smtplib
 import time
 import requests
 from datetime import datetime, date, timedelta, timezone
@@ -16,11 +14,6 @@ import sys
 # ADDED SendGrid imports
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
-
-# Ensure pytz is installed if using timezone names like 'Asia/Kolkata' explicitly for localization.
-# If only timezone.utc is used, pytz is not strictly needed.
-# from pytz import timezone # If you need specific timezones outside of UTC
-# from zoneinfo import ZoneInfo # For Python 3.9+ for timezones like 'Asia/Kolkata'
 
 load_dotenv()
 
@@ -48,11 +41,10 @@ if not openai_api_key:
 openai_client = OpenAI(api_key=openai_api_key)
 
 # --- Email Configuration (for SendGrid) ---
-SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY") # NEW: Get SendGrid API Key
-email_address = os.getenv("EMAIL_ADDRESS") # This will be your SendGrid verified sender email
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+email_address = os.getenv("EMAIL_ADDRESS")
 
-# Check if SendGrid is enabled
-ENABLE_EMAIL_SENDING = all([SENDGRID_API_KEY, email_address]) # MODIFIED: Check for SendGrid API key and sender email
+ENABLE_EMAIL_SENDING = all([SENDGRID_API_KEY, email_address])
 if not ENABLE_EMAIL_SENDING:
     logging.warning("SendGrid API Key or sender email not fully configured. Email sending will be disabled.")
     st.warning("Email sending is disabled. Please ensure SENDGRID_API_KEY and EMAIL_ADDRESS environment variables are set.")
@@ -246,7 +238,6 @@ def check_notes_relevance(sales_notes):
         st.error(f"Error checking notes relevance: {e}")
         return "IRRELEVANT"
 
-# MODIFIED: generate_followup_email to request HTML and generate <p> tags
 def generate_followup_email(customer_name, customer_email, vehicle_name, sales_notes, vehicle_details, current_vehicle_brand=None, sentiment=None):
     features_str = vehicle_details.get("features", "cutting-edge technology and a luxurious experience.")
     vehicle_type = vehicle_details.get("type", "vehicle")
