@@ -500,110 +500,6 @@ def set_expanded_lead(request_id):
     else:
         st.session_state.expanded_lead_id = request_id
 
-# NEW: Function to suggest offer
-def suggest_offer(lead_details: dict, vehicle_data: dict) -> str:
-    customer_name = lead_details.get("customer_name", "customer")
-    vehicle_name = lead_details.get("vehicle_name", "vehicle")
-    current_vehicle = lead_details.get("current_vehicle", "N/A")
-    lead_score_text = lead_details.get("lead_score_text", "New")
-    numeric_lead_score = lead_details.get("numeric_lead_score", 0)
-    sales_notes = lead_details.get("sales_notes", "")
-    
-    vehicle_features = vehicle_data.get("features", "excellent features")
-
-    # Define prompt instructions based on lead score
-    if lead_score_text == "Cold":
-        offer_prompt_advice = "Since the lead is Cold, advise to wait and understand interest. Absolutely DO NOT suggest any immediate offers like discounts or financing. Focus on observation."
-    else: # Hot or Warm
-        offer_prompt_advice = f"""
-        - Suggest a personalized offer type (e.g., "Discount", "Financing Option", "Extended Warranty", "Roadside Assistance").
-        - Consider the customer's current vehicle ({current_vehicle}), their expressed interest ({vehicle_name}), and any concerns in sales notes ("{sales_notes}").
-        - Mention a specific feature of {vehicle_name} ({vehicle_features}) if relevant to the offer.
-        - For pricing/cost concerns, focus on financing options or potential discounts. For safety/performance, extended warranty or roadside assistance.
-        """
-
-    prompt = f"""
-    You are an AI Sales Advisor for AOE Motors. Your task is to suggest the NEXT BEST OFFER TYPE for a customer based on their profile.
-
-    **Customer Profile:**
-    - Name: {customer_name}
-    - Vehicle of Interest: {vehicle_name}
-    - Current Vehicle: {current_vehicle}
-    - Lead Status: {lead_score_text} ({numeric_lead_score} points)
-    - Sales Notes: "{sales_notes}"
-    - Key Features of {vehicle_name}: {vehicle_features}
-
-    **Instructions:**
-    - Output ONLY the recommended offer advice, formatted as plain text or markdown.
-    - Start with "**AI Offer Suggestion:**"
-    {offer_prompt_advice}
-    """
-
-    try:
-        completion = openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a highly analytical AI Sales Advisor. Provide concise, actionable offer suggestions."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7, # You can adjust this (0.0 for stricter, higher for more creative)
-            max_tokens=200
-        )
-        return completion.choices[0].message.content.strip()
-    except Exception as e:
-        logging.error(f"Error suggesting offer: {e}", exc_info=True)
-        return "Error generating offer suggestion. Please try again."
-
-# NEW: Function to generate call talking points
-def generate_call_talking_points(lead_details: dict, vehicle_data: dict) -> str:
-    customer_name = lead_details.get("customer_name", "customer")
-    vehicle_name = lead_details.get("vehicle_name", "vehicle")
-    current_vehicle = lead_details.get("current_vehicle", "N/A")
-    lead_score_text = lead_details.get("lead_score_text", "New")
-    numeric_lead_score = lead_details.get("numeric_lead_score", 0)
-    sales_notes = lead_details.get("sales_notes", "")
-
-    vehicle_features = vehicle_data.get("features", "excellent features")
-
-    prompt = f"""
-    You are an AI Sales Advisor preparing talking points for a sales representative's call with {customer_name}.
-
-    **Customer Profile:**
-    - Name: {customer_name}
-    - Vehicle Interested: {vehicle_name}
-    - Current Vehicle: {current_vehicle}
-    - Lead Status: {lead_score_text} ({numeric_lead_score} points)
-    - Sales Notes: "{sales_notes}"
-    - Key Features of {vehicle_name}: {vehicle_features}
-
-    **Instructions:**
-    - Provide concise, actionable bullet points for the sales call.
-    - Start with "**AI Talking Points:**"
-    - Include points to:
-        - Acknowledge their interest in {vehicle_name}.
-        - Address any specific concerns from "Sales Notes" directly and empathetically.
-        - Highlight 2-3 most relevant features of {vehicle_name} based on profile (e.g., if coming from a different brand, highlight competitive advantages).
-        - Suggest questions to ask to understand their needs better.
-        - Provide a clear call to action for the call (e.g., schedule next step, clarify doubts).
-    - Format output as a markdown list.
-    - If sales notes are empty or irrelevant, focus on general re-engagement or discovery.
-    """
-
-    try:
-        completion = openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are an AI Sales Advisor that provides clear, actionable talking points for sales calls."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7, # You can adjust this
-            max_tokens=300
-        )
-        return completion.choices[0].message.content.strip()
-    except Exception as e:
-        logging.error(f"Error generating talking points: {e}", exc_info=True)
-        return "Error generating talking points. Please try again."
-
 def interpret_and_query(query_text, all_bookings_df):
     query = query_text.lower().strip()
 
@@ -631,7 +527,8 @@ def interpret_and_query(query_text, all_bookings_df):
         if not pd.api.types.is_datetime64_any_dtype(all_bookings_df['booking_timestamp']):
             all_bookings_df['booking_timestamp'] = pd.to_datetime(all_bookings_df['booking_timestamp'])
         
-        # Ensure it's converted to UTC for consistent comparison with today_dt_utc
+        # If naive, localize to UTC (assuming DB timestampz without explicit tzinfo is UTC)
+        # If already localized, convert to UTC for consistency
         if all_bookings_df['booking_timestamp'].dt.tz is None:
             all_bookings_df['booking_timestamp'] = all_bookings_df['booking_timestamp'].dt.tz_localize('UTC')
         else:
@@ -676,7 +573,7 @@ def interpret_and_query(query_text, all_bookings_df):
             completion = openai_client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
-                    {"role": "system", "content": "You are a helpful AI assistant that extracts specific filter criteria from user queries and outputs a JSON object. Only use the provided categories and timeframes."},
+                    {"role": "system", "content": "You are a helpful AI assistant that interprets user queries about sales data and outputs a JSON object. Only use the provided categories and timeframes."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.0, # Keep low for deterministic JSON output
@@ -869,16 +766,14 @@ if bookings_data:
                 )
 
                 col_buttons = st.columns([1,1,1,1]) # Expanded columns for more buttons
-               
-               # NEW: Draft Follow-up Email Button (outside form for responsiveness)
-               draft_email_button_clicked = False
-               if selected_action == 'Follow Up Required':
-               if st.button("Draft Follow-up Email", key=f"draft_email_btn_outside_{row['request_id']}"):
-               draft_email_button_clicked = True
 
                 with col_buttons[0]:
                     save_button = st.form_submit_button("Save Updates")
-                            
+
+                if selected_action == 'Follow Up Required':
+                    with col_buttons[1]:
+                        draft_email_button = st.form_submit_button("Draft Follow-up Email")
+                
                 # NEW: Dynamic Offer Suggestion button (moved inside form and made conditional)
                 # This button will only appear if selected_action is NOT 'Lost' or 'Converted'
                 if selected_action not in ['Lost', 'Converted']: # Only show if not Lost/Converted
@@ -915,8 +810,7 @@ if bookings_data:
                     st.session_state.expanded_lead_id = row['request_id'] 
                     st.rerun()
 
-            # EXISTING: Logic for drafting follow-up email (manual send)
-            if selected_action == 'Follow Up Required' and draft_email_button_clicked:
+            if selected_action == 'Follow Up Required' and 'draft_email_button' in locals() and draft_email_button:
                 if new_sales_notes.strip() == "":
                     st.warning("Sales notes are mandatory to draft a follow-up email.")
                 else:
@@ -969,11 +863,11 @@ if bookings_data:
                 else:
                     st.warning("Email sending is not configured. Please add SMTP credentials to secrets.")
 
-            # NEW: Logic for Dynamic Offer Suggestion
-            # This logic block will now be executed if offer_button was clicked
-            if 'offer_button' in locals() and offer_button: 
-                # Ensure the button's action is allowed for the current status
-                if selected_action not in ['Lost', 'Converted']:
+            # NEW: Logic for Dynamic Offer Suggestion (moved outside form and made an st.button)
+            # Only display the button if not Lost/Converted
+            if selected_action not in ['Lost', 'Converted']:
+                # The button is now outside the form, so it triggers a rerun independently
+                if st.button("Suggest Offer (AI)", key=f"suggest_offer_btn_outside_{row['request_id']}"):
                     st.session_state.info_message = "Generating personalized offer suggestion..."
                     offer_suggestion_details = {
                         "customer_name": row['full_name'],
@@ -985,26 +879,24 @@ if bookings_data:
                     }
                     suggested_offer_text = suggest_offer(offer_suggestion_details, AOE_VEHICLE_DATA.get(row['vehicle'], {}))
                     st.session_state[f"suggested_offer_{row['request_id']}"] = suggested_offer_text
-                    st.session_state.expanded_lead_id = row['request_id']
+                    st.session_state.expanded_lead_id = row['request_id'] # Keep expanded
                     st.session_state.info_message = None
                     st.rerun()
-                else:
-                    st.warning("Cannot suggest offers for 'Lost' or 'Converted' leads. Please change status.")
-                    st.session_state.expanded_lead_id = row['request_id']
-                    st.rerun() # Rerun to show the warning immediately
+            else:
+                # Display message if status is Lost or Converted
+                st.info("Offer suggestion not applicable for this status.")
             
-            # Display suggested offer if available in session state (regardless of button visibility)
+            # Display suggested offer if available in session state
             if f"suggested_offer_{row['request_id']}" in st.session_state:
                 st.subheader("AI-Suggested Offer:")
                 st.markdown(st.session_state[f"suggested_offer_{row['request_id']}"])
                 st.markdown("---")
 
 
-            # NEW: Logic for Talking Points Button and Display
-            # This logic block will now be executed if generate_talking_points_button was clicked
-            if 'generate_talking_points_button' in locals() and generate_talking_points_button:
-                # Ensure the button's action is allowed for the current status
-                if selected_action == 'Call Scheduled':
+            # NEW: Logic for Talking Points (moved outside form and made an st.button)
+            # Only display the button if status is Call Scheduled
+            if selected_action == 'Call Scheduled':
+                if st.button("Generate Talking Points (AI)", key=f"generate_talking_points_btn_outside_{row['request_id']}"):
                     st.session_state.info_message = "Generating talking points..."
                     talking_points_details = {
                         "customer_name": row['full_name'],
@@ -1019,12 +911,8 @@ if bookings_data:
                     st.session_state.expanded_lead_id = row['request_id']
                     st.session_state.info_message = None
                     st.rerun()
-                else: # Should not happen if button is conditional, but as fallback
-                    st.warning("Talking points are only applicable when action status is 'Call Scheduled'.")
-                    st.session_state.expanded_lead_id = row['request_id']
-                    st.rerun() # Rerun to show the warning immediately
             
-            # Display talking points if available in session state (regardless of button visibility)
+            # Display talking points if available in session state
             if f"call_talking_points_{row['request_id']}" in st.session_state:
                 st.subheader("AI-Generated Talking Points:")
                 st.markdown(st.session_state[f"call_talking_points_{row['request_id']}"])
