@@ -4,9 +4,6 @@ import os
 from dotenv import load_dotenv
 import pandas as pd
 from openai import OpenAI
-import smtplib # Keep this import if you still use smtplib elsewhere, otherwise remove
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart # Keep this if you still use it for other email aspects
 import time
 import requests
 from datetime import datetime, date, timedelta, timezone
@@ -17,6 +14,10 @@ import sys
 # ADDED SendGrid imports
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
+
+# Ensure pytz is installed if using timezone names like 'Asia/Kolkata' explicitly for localization.
+# If only timezone.utc is used, pytz is not strictly needed.
+# from pytz import timezone # If you need specific timezones outside of UTC
 
 load_dotenv()
 
@@ -43,12 +44,11 @@ if not openai_api_key:
     st.stop()
 openai_client = OpenAI(api_key=openai_api_key)
 
-# --- Email Configuration (NOW FOR SENDGRID) ---
-SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY") # NEW: Get SendGrid API Key
-email_address = os.getenv("EMAIL_ADDRESS") # This will be your SendGrid verified sender email
+# --- Email Configuration (for SendGrid) ---
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+email_address = os.getenv("EMAIL_ADDRESS")
 
-# Check if SendGrid is enabled
-ENABLE_EMAIL_SENDING = all([SENDGRID_API_KEY, email_address]) # MODIFIED: Check for SendGrid API key and sender email
+ENABLE_EMAIL_SENDING = all([SENDGRID_API_KEY, email_address])
 if not ENABLE_EMAIL_SENDING:
     logging.warning("SendGrid API Key or sender email not fully configured. Email sending will be disabled.")
     st.warning("Email sending is disabled. Please ensure SENDGRID_API_KEY and EMAIL_ADDRESS environment variables are set.")
@@ -147,7 +147,7 @@ def update_booking_field(request_id, field_name, new_value):
         logging.error(f"Error updating {field_name} in Supabase: {e}", exc_info=True)
         st.session_state.error_message = f"Error updating {field_name} in Supabase: {e}"
 
-# MODIFIED: send_email function to use SendGrid API
+# send_email function uses SendGrid API
 def send_email(recipient_email, subject, body):
     if not ENABLE_EMAIL_SENDING:
         logging.error("SendGrid API Key or sender email not fully configured. Email sending is disabled.")
@@ -446,9 +446,9 @@ def generate_lost_email(customer_name, vehicle_name):
 """
     return subject, body
 
-# MODIFIED: generate_welcome_email to use <p> tags for spacing
 def generate_welcome_email(customer_name, vehicle_name):
     subject = f"Welcome to the AOE Family, {customer_name}!"
+    # MODIFIED: generate_welcome_email to use <p> tags for spacing
     body = f"""<p>Dear {customer_name},</p>
 <p>Welcome to the AOE Motors family! We're thrilled you chose the {vehicle_name}.</p>
 <p>To help you get started, here are some important next steps and documents:</p>
