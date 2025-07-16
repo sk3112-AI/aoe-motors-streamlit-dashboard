@@ -15,6 +15,12 @@ import sys
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 
+# ADDED markdown_it for Markdown to HTML conversion
+import markdown_it
+
+# Initialize MarkdownIt parser for converting AI output to HTML
+md_converter = markdown_it.MarkdownIt()
+
 # For IST timezone conversion for analytics
 try:
     from zoneinfo import ZoneInfo
@@ -268,21 +274,21 @@ def check_notes_relevance(sales_notes):
 def generate_followup_email(customer_name, customer_email, vehicle_name, sales_notes, vehicle_details, current_vehicle_brand=None, sentiment=None):
     features_str = vehicle_details.get("features", "cutting-edge technology and a luxurious experience.")
     vehicle_type = vehicle_details.get("type", "vehicle")
-    powertrain = vehicle_details.get("powertrain", "advanced performance")
+    powertrain = vehicle_details.get("powertrain", "advanced Inference")
 
     comparison_context = ""
-    # MODIFIED: Prompt instructions now explicitly ask for HTML with <p> tags
+    # MODIFIED: Prompt instructions now explicitly ask for MARKDOWN, not HTML.
     prompt_instructions = """
     - Start with a polite greeting.
     - Acknowledge their test drive or recent interaction.
-    - The entire email body MUST be composed of distinct HTML paragraph tags (<p>...</p>).
-    - Each logical section/paragraph MUST be entirely enclosed within its own <p> and </p> tags.
-    - Each paragraph (<p>...</p>) should be concise (typically 2-4 sentences maximum).
-    - Aim for a total of 5-7 distinct HTML paragraphs.
-    - DO NOT use \\n\\n for spacing; the <p> tags provide the necessary visual separation.
+    - The entire email body MUST be composed of distinct **Markdown paragraphs**. Use a double newline (`\\n\\n`) to separate paragraphs.
+    - For lists, use standard Markdown bullet points (e.g., `- Item 1\\n- Item 2`).
+    - Each paragraph should be concise (typically 2-4 sentences maximum).
+    - Aim for a total of 5-7 distinct Markdown paragraphs.
+    - **DO NOT include any HTML tags** (like <p>, <ul>, <li>, <br>) directly in the output.
     - DO NOT include any section dividers (like '---').
-    - Ensure there is no extra blank space before the first <p> tag or after the last </p> tag.
-    - Output the email body in valid HTML format.
+    - Ensure there is no extra blank space before the first paragraph or after the last.
+    - Output the email body in valid Markdown format.
     - Separate Subject and Body with "Subject: " at the beginning of the subject line.
     """
 
@@ -454,13 +460,19 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
                 body_content = draft
             
             # NEW: Post-processing to ensure HTML <p> tags for spacing
-            if "<p>" not in body_content and "</p>" not in body_content: # Check if AI did not include <p> tags
-                paragraphs = body_content.split('\n\n') # Split by double newline
-                body_content = "".join(f"<p>{p.strip()}</p>" for p in paragraphs if p.strip())
+            # This post-processing is now for converting MARKDOWN to HTML for the SENT email.
+            # The prompt has been changed to request Markdown.
+            if body_content.strip() and not ("<p>" in body_content): # Check if AI did not include <p> tags
+                # Split by double newline for paragraphs, then re-join with <p> tags
+                paragraphs = body_content.split('\n\n')
+                html_body_for_sending = "".join(f"<p>{p.strip()}</p>" for p in paragraphs if p.strip())
+            else:
+                html_body_for_sending = body_content # Assume it's already HTML if <p> tags are found
             
-            logging.debug(f"Final Generated Body (partial): {body_content[:100]}...")
+            logging.debug(f"Final Generated Body (Markdown for UI, partial): {body_content[:100]}...")
+            logging.debug(f"Final HTML Body (for sending, partial): {html_body_for_sending[:100]}...")
             
-            return subject_line, body_content
+            return subject_line, html_body_for_sending # RETURN THE HTML VERSION FOR SENDING
     except Exception as e:
         logging.error(f"Error drafting email with AI: {e}", exc_info=True)
         st.error(f"Error drafting email with AI: {e}")
@@ -550,7 +562,16 @@ def suggest_offer(lead_details: dict, vehicle_data: dict) -> str:
             temperature=0.7, # You can adjust this (0.0 for stricter, higher for more creative)
             max_tokens=200
         )
-        return completion.choices[0].message.content.strip()
+        raw_output = completion.choices[0].message.content.strip()
+        # Ensure markdown paragraphs/lists for UI readability
+        if not (raw_output.startswith("AI Offer Suggestion:") and ("*" in raw_output or "-" in raw_output or "\n\n" in raw_output)):
+            # If no clear markdown formatting, try to convert lines to paragraphs
+            paragraphs = raw_output.split('\n\n')
+            formatted_output = "AI Offer Suggestion:\n\n" + "\n\n".join(f"{p.strip()}" for p in paragraphs if p.strip())
+        else:
+            formatted_output = raw_output # Already has some markdown, just return as is
+
+        return formatted_output
     except Exception as e:
         logging.error(f"Error suggesting offer: {e}", exc_info=True)
         return "Error generating offer suggestion. Please try again."
@@ -600,7 +621,15 @@ def generate_call_talking_points(lead_details: dict, vehicle_data: dict) -> str:
             temperature=0.7, # You can adjust this
             max_tokens=300
         )
-        return completion.choices[0].message.content.strip()
+        raw_output = completion.choices[0].message.content.strip()
+        # Ensure markdown lists/paragraphs for UI readability
+        if not (raw_output.startswith("AI Talking Points:") and ("*" in raw_output or "-" in raw_output or "\n\n" in raw_output)):
+            # If no clear markdown formatting, try to convert lines to paragraphs or list items
+            lines = raw_output.split('\n')
+            formatted_output = "AI Talking Points:\n\n" + "\n".join(f"- {line.strip()}" for line in lines if line.strip())
+        else:
+            formatted_output = raw_output # Already has some markdown, just return as is
+        return formatted_output
     except Exception as e:
         logging.error(f"Error generating talking points: {e}", exc_info=True)
         return "Error generating talking points. Please try again."
@@ -879,32 +908,33 @@ if bookings_data:
                     with col_buttons[1]:
                         draft_email_button = st.form_submit_button("Draft Follow-up Email")
                 
-                # NEW: Suggest Offer (AI) button - conditional display based on action status
-                # This button is now outside the form for immediate triggering, not a form_submit_button.
-                # Its display is controlled here for conditional visibility.
-                
             # --- START AI BUTTONS OUTSIDE THE FORM ---
-            # Place these buttons directly after the st.form(...) block but within the expander
+            # These buttons are not tied to the form submission,
+            # allowing immediate actions without saving other form inputs.
+            # State variables to track button clicks outside the form
             offer_button_clicked = False
-            talking_points_button_clicked = False
-            
+            generate_talking_points_button_clicked = False # Corrected variable name
+
             ai_buttons_cols = st.columns([1,1]) # Create new columns for these two buttons outside the form
 
             with ai_buttons_cols[0]:
                 if selected_action not in ['Lost', 'Converted']: # Only show if not Lost/Converted
+                    # This is now a regular st.button
                     if st.button("Suggest Offer (AI)", key=f"suggest_offer_btn_outside_{row['request_id']}"):
                         offer_button_clicked = True
                 else:
-                    st.info("Offer suggestion not applicable for this status.") # Display message if not applicable
+                    # Display message if status is Lost or Converted
+                    st.info("Offer suggestion not applicable for this status.")
 
             with ai_buttons_cols[1]:
                 if selected_action == 'Call Scheduled': # Only show if status is Call Scheduled
+                    # This is now a regular st.button
                     if st.button("Generate Talking Points (AI)", key=f"generate_talking_points_btn_outside_{row['request_id']}"):
-                        talking_points_button_clicked = True
+                        generate_talking_points_button_clicked = True
             # --- END AI BUTTONS OUTSIDE THE FORM ---
 
 
-            if save_button: # Logic for Save Updates
+            if save_button: # Logic for Save Updates (inside the form)
                 updates_made = False
                 if selected_action != current_action:
                     update_booking_field(row['request_id'], 'action_status', selected_action)
