@@ -4,7 +4,6 @@ import os
 from dotenv import load_dotenv
 import pandas as pd
 from openai import OpenAI
-# Removed smtplib, email.mime.text, email.mime.multipart as they are replaced by SendGrid
 import time
 import requests
 from datetime import datetime, date, timedelta, timezone
@@ -43,7 +42,7 @@ openai_client = OpenAI(api_key=openai_api_key)
 
 # --- Email Configuration (for SendGrid) ---
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
-email_address = os.getenv("EMAIL_address")
+email_address = os.getenv("EMAIL_ADDRESS")
 
 ENABLE_EMAIL_SENDING = all([SENDGRID_API_KEY, email_address])
 if not ENABLE_EMAIL_SENDING:
@@ -144,7 +143,7 @@ def update_booking_field(request_id, field_name, new_value):
         logging.error(f"Error updating {field_name} in Supabase: {e}", exc_info=True)
         st.session_state.error_message = f"Error updating {field_name} in Supabase: {e}"
 
-# MODIFIED: send_email function to use SendGrid API
+# send_email function uses SendGrid API
 def send_email(recipient_email, subject, body):
     if not ENABLE_EMAIL_SENDING:
         logging.error("SendGrid API Key or sender email not fully configured. Email sending is disabled.")
@@ -702,7 +701,7 @@ if bookings_data:
                     with col_buttons[1]:
                         draft_email_button = st.form_submit_button("Draft Follow-up Email")
                 
-                # NEW: Dynamic Offer Suggestion button
+                # NEW: Dynamic Offer Suggestion button (Added placeholder for now)
                 with col_buttons[2]:
                     offer_button = st.form_submit_button("Suggest Offer (AI)")
 
@@ -783,7 +782,7 @@ if bookings_data:
                 else:
                     st.warning("Email sending is not configured. Please add SMTP credentials to secrets.")
 
-            # NEW: Logic for Dynamic Offer Suggestion
+            # NEW: Logic for Dynamic Offer Suggestion (Added temporary placeholder for discussion)
             if 'offer_button' in locals() and offer_button: # Check if offer_button was clicked
                 st.session_state.info_message = "Generating personalized offer suggestion..."
                 offer_suggestion_details = {
@@ -794,12 +793,14 @@ if bookings_data:
                     "numeric_lead_score": current_numeric_lead_score,
                     "sales_notes": new_sales_notes # Use the latest notes
                 }
+                # Call the new suggest_offer function
                 suggested_offer_text = suggest_offer(offer_suggestion_details, AOE_VEHICLE_DATA.get(row['vehicle'], {}))
                 st.session_state[f"suggested_offer_{row['request_id']}"] = suggested_offer_text
                 st.session_state.expanded_lead_id = row['request_id'] # Keep expanded
                 st.session_state.info_message = None # Clear info message
                 st.rerun()
             
+            # Display suggested offer if available in session state
             if f"suggested_offer_{row['request_id']}" in st.session_state:
                 st.subheader("AI-Suggested Offer:")
                 st.markdown(st.session_state[f"suggested_offer_{row['request_id']}"])
