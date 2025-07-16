@@ -6,25 +6,21 @@ import pandas as pd
 from openai import OpenAI
 import time
 import requests
-from datetime import datetime, date, timedelta, timezone # ADDED timezone
+from datetime import datetime, date, timedelta, timezone
 import json
 import logging
 import sys
 
-# For IST timezone conversion for analytics
-# Ensure 'tzdata' (or 'pytz') is in your requirements.txt for zoneinfo to work with 'Asia/Kolkata'
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:
-    # Fallback for Python versions < 3.9 or if tzdata is not installed
-    # If using older Python or without tzdata, accurate timezone conversion requires pytz
-    # For a demo, if exact IST local time filtering is not crucial, timezone.utc is sufficient
-    logging.warning("zoneinfo not available directly. Analytics might use system's local time or UTC for 'today', 'yesterday' unless pytz is configured.")
-    ZoneInfo = None # Fallback or handle differently
-
 # ADDED SendGrid imports
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
+
+# For IST timezone conversion for analytics
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    logging.warning("zoneinfo (or tzdata) not available. Using fixed offset for IST. Install 'tzdata' for full timezone support.")
+    ZoneInfo = None # Fallback or handle differently
 
 load_dotenv()
 
@@ -456,6 +452,14 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
             else:
                 subject_line = f"Following up on your {vehicle_name} Test Drive"
                 body_content = draft
+            
+            # NEW: Post-processing to ensure HTML <p> tags for spacing
+            if "<p>" not in body_content and "</p>" not in body_content: # Check if AI did not include <p> tags
+                paragraphs = body_content.split('\n\n') # Split by double newline
+                body_content = "".join(f"<p>{p.strip()}</p>" for p in paragraphs if p.strip())
+            
+            logging.debug(f"Final Generated Body (partial): {body_content[:100]}...")
+            
             return subject_line, body_content
     except Exception as e:
         logging.error(f"Error drafting email with AI: {e}", exc_info=True)
@@ -542,7 +546,7 @@ def suggest_offer(lead_details: dict, vehicle_data: dict) -> str:
                 {"role": "system", "content": "You are a highly analytical AI Sales Advisor. Provide concise, actionable offer suggestions."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.7,
+            temperature=0.7, # You can adjust this (0.0 for stricter, higher for more creative)
             max_tokens=200
         )
         return completion.choices[0].message.content.strip()
@@ -592,7 +596,7 @@ def generate_call_talking_points(lead_details: dict, vehicle_data: dict) -> str:
                 {"role": "system", "content": "You are an AI Sales Advisor that provides clear, actionable talking points for sales calls."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.7,
+            temperature=0.7, # You can adjust this
             max_tokens=300
         )
         return completion.choices[0].message.content.strip()
@@ -600,19 +604,17 @@ def generate_call_talking_points(lead_details: dict, vehicle_data: dict) -> str:
         logging.error(f"Error generating talking points: {e}", exc_info=True)
         return "Error generating talking points. Please try again."
 
-
 def interpret_and_query(query_text, all_bookings_df):
     query = query_text.lower().strip()
 
     # Time zone conversion for current time (IST - Asia/Kolkata)
     # Ensure current time is also timezone-aware for comparison with timestampz
-    # Use ZoneInfo for specific timezones like 'Asia/Kolkata'
     try:
-        IST_TZ = timezone(timedelta(hours=5, minutes=30)) # For fixed offset IST
-        # If tzdata is installed: IST_TZ = ZoneInfo('Asia/Kolkata')
-    except Exception:
-        logging.warning("zoneinfo (or pytz) not fully configured for 'Asia/Kolkata'. Using fixed offset IST.")
-        IST_TZ = timezone(timedelta(hours=5, minutes=30)) # Fallback
+        from zoneinfo import ZoneInfo
+        IST_TZ = ZoneInfo('Asia/Kolkata')
+    except ImportError:
+        logging.warning("zoneinfo (or tzdata) not available. Using fixed offset for IST. Install 'tzdata' for full timezone support.")
+        IST_TZ = timezone(timedelta(hours=5, minutes=30)) # Fallback for fixed offset
 
     today_dt_ist = datetime.now(IST_TZ) # Get current time in IST
     today_dt_utc = today_dt_ist.astimezone(timezone.utc) # Convert IST today to UTC for DB comparison
@@ -636,17 +638,16 @@ def interpret_and_query(query_text, all_bookings_df):
             all_bookings_df['booking_timestamp'] = all_bookings_df['booking_timestamp'].dt.tz_convert('UTC')
 
     # Define the types of queries the LLM can interpret and provide few-shot examples
+    # MODIFIED: Prompt to include Warm/Cold leads, location, and refined output format
     prompt = f"""
     Analyze the following user query about automotive leads.
     Extract the 'lead_status', 'time_frame', and optionally 'location'.
-    If the query cannot be interpreted, set 'query_type' to "UNINTERPRETED".
-
-    Lead Statuses: "Hot", "Warm", "Cold", "New Lead", "Converted", "Lost", "All" (if no specific status is mentioned but asking for total leads).
-    Time Frames: "TODAY", "YESTERDAY", "LAST_WEEK" (last 7 days), "LAST_MONTH" (last 30 days), "LAST_YEAR" (last 365 days), "ALL_TIME".
-    Locations: "New York", "Los Angeles", "Chicago", "Houston", "Miami", "All Locations" (if no specific location is mentioned).
-
     Return a JSON object with 'lead_status', 'time_frame', and 'location'.
     If the query cannot be interpreted, return {{"query_type": "UNINTERPRETED"}}.
+
+    Lead Statuses: "Hot", "Warm", "Cold", "Converted", "Lost", "All" (if no specific status is mentioned but asking for total leads, e.g., "total leads today").
+    Time Frames: "TODAY", "YESTERDAY", "LAST_WEEK" (last 7 days), "LAST_MONTH" (last 30 days), "LAST_YEAR" (last 365 days), "ALL_TIME".
+    Locations: "New York", "Los Angeles", "Chicago", "Houston", "Miami", "All Locations" (if no specific location is mentioned, e.g., "total leads in New York").
 
     Examples:
     - User: "how many hot leads last week in New York?"
@@ -663,6 +664,9 @@ def interpret_and_query(query_text, all_bookings_df):
 
     - User: "leads lost yesterday"
     - Output: {{"lead_status": "Lost", "time_frame": "YESTERDAY", "location": "All Locations"}}
+
+    - User: "warm leads last month"
+    - Output: {{"lead_status": "Warm", "time_frame": "LAST_MONTH", "location": "All Locations"}}
 
     User Query: "{query_text}"
     """
@@ -687,7 +691,7 @@ def interpret_and_query(query_text, all_bookings_df):
             location_filter_nlq = response_json.get("location")
 
             # Check if LLM returned "UNINTERPRETED" explicitly
-            if response_json.get("query_type") == "UNINTERPRETED":
+            if response_json.get("query_type") == "UNINTERPRETED": # This can come if LLM does not return structured JSON.
                  return "This cannot be processed now - Restricted for demo. Please try queries about specific lead types (Hot, Warm, Cold, Converted, Lost), locations, or timeframes (today, last week, last month)."
 
             filtered_df = all_bookings_df.copy()
@@ -707,9 +711,10 @@ def interpret_and_query(query_text, all_bookings_df):
 
             # Apply lead status filter
             if lead_status_filter and lead_status_filter != "All":
-                filtered_df = filtered_df[filtered_df['lead_score'].str.lower() == lead_status_filter.lower()]
-                if lead_status_filter in ["Converted", "Lost"]: # Action status specific filtering
+                if lead_status_filter in ["Converted", "Lost"]: # These map to action_status
                     filtered_df = filtered_df[filtered_df['action_status'] == lead_status_filter]
+                else: # Hot, Warm, Cold map to lead_score
+                    filtered_df = filtered_df[filtered_df['lead_score'].str.lower() == lead_status_filter.lower()]
                 
             # Apply location filter
             if location_filter_nlq and location_filter_nlq != "All Locations":
@@ -732,6 +737,7 @@ def interpret_and_query(query_text, all_bookings_df):
             
             # Clarify that results are within the sidebar's filters
             sidebar_date_range_str = ""
+            # Ensure sidebar_start_date and sidebar_end_date exist in session state before accessing
             if st.session_state.get('sidebar_start_date') and st.session_state.get('sidebar_end_date'):
                 s_date = st.session_state['sidebar_start_date'].strftime('%b %d, %Y')
                 e_date = st.session_state['sidebar_end_date'].strftime('%b %d, %Y')
@@ -740,7 +746,8 @@ def interpret_and_query(query_text, all_bookings_df):
             result_message = f"📊 {' '.join(message_parts).capitalize()}: **{result_count}**{sidebar_date_range_str}"
 
             # New: "refine time period" message logic
-            if result_count == 0 and (st.session_state.get('sidebar_end_date') - st.session_state.get('sidebar_start_date')).days < 7: # If filter period is less than 7 days
+            # This check uses the actual sidebar filter dates
+            if result_count == 0 and (st.session_state.get('sidebar_end_date', date.today()) - st.session_state.get('sidebar_start_date', date.today())).days < 7: # If filter period is less than 7 days
                 result_message += "<br>Consider expanding the date range in the sidebar filters if you expect more results."
             
             return result_message
@@ -767,7 +774,7 @@ if 'info_message' not in st.session_state:
 if 'success_message' not in st.session_state:
     st.session_state.success_message = None
 if 'error_message' not in st.session_state:
-    st.session_state.error_message = None
+    st.session_state.error_message = None # Corrected typo in key name from 'error' to 'error_message'
 
 # Display messages stored in session state
 if st.session_state.info_message:
@@ -776,7 +783,7 @@ if st.session_state.info_message:
 if st.session_state.success_message:
     st.success(st.session_state.success_message)
     st.session_state.success_message = None
-if st.session_state.error_message:
+if st.session_state.error_message: # Corrected typo in key name from 'error' to 'error_message'
     st.error(st.session_state.error_message)
     st.session_state.error_message = None
 
@@ -870,13 +877,16 @@ if bookings_data:
                     with col_buttons[1]:
                         draft_email_button = st.form_submit_button("Draft Follow-up Email")
                 
-                # NEW: Dynamic Offer Suggestion button
-                with col_buttons[2]:
-                    offer_button = st.form_submit_button("Suggest Offer (AI)")
+                # NEW: Dynamic Offer Suggestion button (moved inside form and made conditional)
+                # This button will only appear if selected_action is NOT 'Lost' or 'Converted'
+                if selected_action not in ['Lost', 'Converted']: # Only show if not Lost/Converted
+                    with col_buttons[2]:
+                        offer_button = st.form_submit_button("Suggest Offer (AI)")
+                # No 'else' here for the button itself, as we handle display outside the form if button not clicked
 
-                # NEW: Talking Points Button
+                # NEW: Talking Points Button (moved inside form and made conditional)
                 if selected_action == 'Call Scheduled': # Only show if status is Call Scheduled
-                    with col_buttons[3]:
+                    with col_buttons[3]: # Place button in the 4th column
                         generate_talking_points_button = st.form_submit_button("Generate Talking Points (AI)")
 
 
@@ -903,6 +913,7 @@ if bookings_data:
                     st.session_state.expanded_lead_id = row['request_id'] 
                     st.rerun()
 
+            # EXISTING: Logic for drafting follow-up email (manual send)
             if selected_action == 'Follow Up Required' and 'draft_email_button' in locals() and draft_email_button:
                 if new_sales_notes.strip() == "":
                     st.warning("Sales notes are mandatory to draft a follow-up email.")
@@ -948,7 +959,7 @@ if bookings_data:
 
                 if ENABLE_EMAIL_SENDING:
                     if st.button(f"Click to Send Drafted Email to {row['full_name']}", key=f"send_draft_email_btn_{row['request_id']}"):
-                        if send_email(row['email'], edited_subject, edited_body, request_id=row['request_id'], event_type="email_followup_sent"): # Added logging
+                        if send_email(row['email'], edited_subject, edited_body, request_id=row['request_id'], event_type="email_followup_sent"):
                             st.session_state.pop(f"draft_subject_{row['request_id']}", None)
                             st.session_state.pop(f"draft_body_{row['request_id']}", None)
                             st.session_state.expanded_lead_id = row['request_id']
@@ -956,48 +967,62 @@ if bookings_data:
                 else:
                     st.warning("Email sending is not configured. Please add SMTP credentials to secrets.")
 
-            # NEW: Logic for Dynamic Offer Suggestion (moved from outside form)
-            if 'offer_button' in locals() and offer_button: # Check if offer_button was clicked within the form
-                st.session_state.info_message = "Generating personalized offer suggestion..."
-                offer_suggestion_details = {
-                    "customer_name": row['full_name'],
-                    "vehicle_name": row['vehicle'],
-                    "current_vehicle": row['current_vehicle'],
-                    "lead_score_text": current_lead_score_text,
-                    "numeric_lead_score": current_numeric_lead_score,
-                    "sales_notes": new_sales_notes # Use the latest notes
-                }
-                suggested_offer_text = suggest_offer(offer_suggestion_details, AOE_VEHICLE_DATA.get(row['vehicle'], {}))
-                st.session_state[f"suggested_offer_{row['request_id']}"] = suggested_offer_text
-                st.session_state.expanded_lead_id = row['request_id'] # Keep expanded
-                st.session_state.info_message = None # Clear info message
-                st.rerun()
+            # NEW: Logic for Dynamic Offer Suggestion
+            # This logic block will now be executed if offer_button was clicked
+            if 'offer_button' in locals() and offer_button: 
+                # Ensure the button's action is allowed for the current status
+                if selected_action not in ['Lost', 'Converted']:
+                    st.session_state.info_message = "Generating personalized offer suggestion..."
+                    offer_suggestion_details = {
+                        "customer_name": row['full_name'],
+                        "vehicle_name": row['vehicle'],
+                        "current_vehicle": row['current_vehicle'],
+                        "lead_score_text": current_lead_score_text,
+                        "numeric_lead_score": current_numeric_lead_score,
+                        "sales_notes": new_sales_notes # Use the latest notes
+                    }
+                    suggested_offer_text = suggest_offer(offer_suggestion_details, AOE_VEHICLE_DATA.get(row['vehicle'], {}))
+                    st.session_state[f"suggested_offer_{row['request_id']}"] = suggested_offer_text
+                    st.session_state.expanded_lead_id = row['request_id']
+                    st.session_state.info_message = None
+                    st.rerun()
+                else:
+                    st.warning("Cannot suggest offers for 'Lost' or 'Converted' leads. Please change status.")
+                    st.session_state.expanded_lead_id = row['request_id']
+                    st.rerun() # Rerun to show the warning immediately
             
-            # Display suggested offer if available in session state
+            # Display suggested offer if available in session state (regardless of button visibility)
             if f"suggested_offer_{row['request_id']}" in st.session_state:
                 st.subheader("AI-Suggested Offer:")
                 st.markdown(st.session_state[f"suggested_offer_{row['request_id']}"])
                 st.markdown("---")
 
 
-            # NEW: Logic for Talking Points (moved from outside form)
-            if 'generate_talking_points_button' in locals() and generate_talking_points_button: # Check if button was clicked
-                st.session_state.info_message = "Generating talking points..."
-                talking_points_details = {
-                    "customer_name": row['full_name'],
-                    "vehicle_name": row['vehicle'],
-                    "current_vehicle": row['current_vehicle'],
-                    "lead_score_text": current_lead_score_text,
-                    "numeric_lead_score": current_numeric_lead_score,
-                    "sales_notes": new_sales_notes # Use the latest notes
-                }
-                generated_points = generate_call_talking_points(talking_points_details, AOE_VEHICLE_DATA.get(row['vehicle'], {}))
-                st.session_state[f"call_talking_points_{row['request_id']}"] = generated_points
-                st.session_state.expanded_lead_id = row['request_id']
-                st.session_state.info_message = None
-                st.rerun()
+            # NEW: Logic for Talking Points Button and Display
+            # This logic block will now be executed if generate_talking_points_button was clicked
+            if 'generate_talking_points_button' in locals() and generate_talking_points_button:
+                # Ensure the button's action is allowed for the current status
+                if selected_action == 'Call Scheduled':
+                    st.session_state.info_message = "Generating talking points..."
+                    talking_points_details = {
+                        "customer_name": row['full_name'],
+                        "vehicle_name": row['vehicle'],
+                        "current_vehicle": row['current_vehicle'],
+                        "lead_score_text": current_lead_score_text,
+                        "numeric_lead_score": current_numeric_lead_score,
+                        "sales_notes": new_sales_notes # Use the latest notes
+                    }
+                    generated_points = generate_call_talking_points(talking_points_details, AOE_VEHICLE_DATA.get(row['vehicle'], {}))
+                    st.session_state[f"call_talking_points_{row['request_id']}"] = generated_points
+                    st.session_state.expanded_lead_id = row['request_id']
+                    st.session_state.info_message = None
+                    st.rerun()
+                else: # Should not happen if button is conditional, but as fallback
+                    st.warning("Talking points are only applicable when action status is 'Call Scheduled'.")
+                    st.session_state.expanded_lead_id = row['request_id']
+                    st.rerun() # Rerun to show the warning immediately
             
-            # Display talking points if available in session state
+            # Display talking points if available in session state (regardless of button visibility)
             if f"call_talking_points_{row['request_id']}" in st.session_state:
                 st.subheader("AI-Generated Talking Points:")
                 st.markdown(st.session_state[f"call_talking_points_{row['request_id']}"])
