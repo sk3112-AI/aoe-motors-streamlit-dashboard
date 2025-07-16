@@ -4,6 +4,7 @@ import os
 from dotenv import load_dotenv
 import pandas as pd
 from openai import OpenAI
+# Removed smtplib, email.mime.text, email.mime.multipart as they are replaced by SendGrid
 import time
 import requests
 from datetime import datetime, date, timedelta, timezone
@@ -14,10 +15,6 @@ import sys
 # ADDED SendGrid imports
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
-
-# Ensure pytz is installed if using timezone names like 'Asia/Kolkata' explicitly for localization.
-# If only timezone.utc is used, pytz is not strictly needed.
-# from pytz import timezone # If you need specific timezones outside of UTC
 
 load_dotenv()
 
@@ -46,7 +43,7 @@ openai_client = OpenAI(api_key=openai_api_key)
 
 # --- Email Configuration (for SendGrid) ---
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
-email_address = os.getenv("EMAIL_ADDRESS")
+email_address = os.getenv("EMAIL_address")
 
 ENABLE_EMAIL_SENDING = all([SENDGRID_API_KEY, email_address])
 if not ENABLE_EMAIL_SENDING:
@@ -147,7 +144,7 @@ def update_booking_field(request_id, field_name, new_value):
         logging.error(f"Error updating {field_name} in Supabase: {e}", exc_info=True)
         st.session_state.error_message = f"Error updating {field_name} in Supabase: {e}"
 
-# send_email function uses SendGrid API
+# MODIFIED: send_email function to use SendGrid API
 def send_email(recipient_email, subject, body):
     if not ENABLE_EMAIL_SENDING:
         logging.error("SendGrid API Key or sender email not fully configured. Email sending is disabled.")
@@ -704,6 +701,11 @@ if bookings_data:
                 if selected_action == 'Follow Up Required':
                     with col_buttons[1]:
                         draft_email_button = st.form_submit_button("Draft Follow-up Email")
+                
+                # NEW: Dynamic Offer Suggestion button
+                with col_buttons[2]:
+                    offer_button = st.form_submit_button("Suggest Offer (AI)")
+
 
             if save_button:
                 updates_made = False
@@ -780,6 +782,28 @@ if bookings_data:
                             st.rerun()
                 else:
                     st.warning("Email sending is not configured. Please add SMTP credentials to secrets.")
+
+            # NEW: Logic for Dynamic Offer Suggestion
+            if 'offer_button' in locals() and offer_button: # Check if offer_button was clicked
+                st.session_state.info_message = "Generating personalized offer suggestion..."
+                offer_suggestion_details = {
+                    "customer_name": row['full_name'],
+                    "vehicle_name": row['vehicle'],
+                    "current_vehicle": row['current_vehicle'],
+                    "lead_score_text": current_lead_score_text,
+                    "numeric_lead_score": current_numeric_lead_score,
+                    "sales_notes": new_sales_notes # Use the latest notes
+                }
+                suggested_offer_text = suggest_offer(offer_suggestion_details, AOE_VEHICLE_DATA.get(row['vehicle'], {}))
+                st.session_state[f"suggested_offer_{row['request_id']}"] = suggested_offer_text
+                st.session_state.expanded_lead_id = row['request_id'] # Keep expanded
+                st.session_state.info_message = None # Clear info message
+                st.rerun()
+            
+            if f"suggested_offer_{row['request_id']}" in st.session_state:
+                st.subheader("AI-Suggested Offer:")
+                st.markdown(st.session_state[f"suggested_offer_{row['request_id']}"])
+                st.markdown("---")
 
 else:
     st.info("No test drive bookings to display yet. Submit a booking from your frontend!")
