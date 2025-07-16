@@ -4,6 +4,8 @@ import os
 from dotenv import load_dotenv
 import pandas as pd
 from openai import OpenAI
+# Removed smtplib import as it's replaced by SendGrid
+# Removed email.mime.text and email.mime.multipart as they are solely for smtplib
 import time
 import requests
 from datetime import datetime, date, timedelta, timezone
@@ -14,6 +16,11 @@ import sys
 # ADDED SendGrid imports
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
+
+# Ensure pytz is installed if using timezone names like 'Asia/Kolkata' explicitly for localization.
+# If only timezone.utc is used, pytz is not strictly needed.
+# from pytz import timezone # If you need specific timezones outside of UTC
+# from zoneinfo import ZoneInfo # For Python 3.9+ for timezones like 'Asia/Kolkata'
 
 load_dotenv()
 
@@ -41,10 +48,11 @@ if not openai_api_key:
 openai_client = OpenAI(api_key=openai_api_key)
 
 # --- Email Configuration (for SendGrid) ---
-SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
-email_address = os.getenv("EMAIL_ADDRESS")
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY") # NEW: Get SendGrid API Key
+email_address = os.getenv("EMAIL_ADDRESS") # This will be your SendGrid verified sender email
 
-ENABLE_EMAIL_SENDING = all([SENDGRID_API_KEY, email_address])
+# Check if SendGrid is enabled
+ENABLE_EMAIL_SENDING = all([SENDGRID_API_KEY, email_address]) # MODIFIED: Check for SendGrid API key and sender email
 if not ENABLE_EMAIL_SENDING:
     logging.warning("SendGrid API Key or sender email not fully configured. Email sending will be disabled.")
     st.warning("Email sending is disabled. Please ensure SENDGRID_API_KEY and EMAIL_ADDRESS environment variables are set.")
@@ -705,84 +713,7 @@ if bookings_data:
                 with col_buttons[2]:
                     offer_button = st.form_submit_button("Suggest Offer (AI)")
 
-
-            if save_button:
-                updates_made = False
-                if selected_action != current_action:
-                    update_booking_field(row['request_id'], 'action_status', selected_action)
-                    updates_made = True
-                if new_sales_notes != (row['sales_notes'] if row['sales_notes'] else ""):
-                    update_booking_field(row['request_id'], 'sales_notes', new_sales_notes)
-                    updates_made = True
-
-                if selected_action == 'Lost' and selected_action != current_action and ENABLE_EMAIL_SENDING:
-                    st.session_state.info_message = f"Customer {row['full_name']} marked as Lost. Sending 'Lost' email..."
-                    lost_subject, lost_body = generate_lost_email(row['full_name'], row['vehicle'])
-                    send_email(row['email'], lost_subject, lost_body) 
-                
-                elif selected_action == 'Converted' and selected_action != current_action and ENABLE_EMAIL_SENDING:
-                    st.session_state.info_message = f"Customer {row['full_name']} marked as Converted. Sending welcome email..."
-                    welcome_subject, welcome_body = generate_welcome_email(row['full_name'], row['vehicle'])
-                    send_email(row['email'], welcome_subject, welcome_body) 
-
-                if updates_made:
-                    st.session_state.expanded_lead_id = row['request_id'] 
-                    st.rerun()
-
-            if selected_action == 'Follow Up Required' and 'draft_email_button' in locals() and draft_email_button:
-                if new_sales_notes.strip() == "":
-                    st.warning("Sales notes are mandatory to draft a follow-up email.")
-                else:
-                    st.session_state.info_message = "Analyzing sales notes for relevance and sentiment..."
-                    notes_relevance = check_notes_relevance(new_sales_notes)
-
-                    if notes_relevance == "IRRELEVANT":
-                        st.warning("The sales notes provided are unclear or irrelevant. Please update the 'Sales Notes' with more descriptive information (e.g., specific customer concerns, positive feedback, or key discussion points) to enable the AI to draft a relevant email.")
-                        st.session_state.info_message = None 
-                    else:
-                        notes_sentiment = analyze_sentiment(new_sales_notes)
-                        
-                        vehicle_details = AOE_VEHICLE_DATA.get(row['vehicle'], {})
-                        current_vehicle_brand_val = row['current_vehicle'].split(' ')[0] if row['current_vehicle'] else None
-                        
-                        if vehicle_details:
-                            followup_subject, followup_body = generate_followup_email(
-                                row['full_name'], row['email'], row['vehicle'], new_sales_notes, vehicle_details,
-                                current_vehicle_brand=current_vehicle_brand_val,
-                                sentiment=notes_sentiment
-                            )
-                            if followup_subject and followup_body:
-                                st.session_state[f"draft_subject_{row['request_id']}"] = followup_subject
-                                st.session_state[f"draft_body_{row['request_id']}"] = followup_body
-                                st.session_state.expanded_lead_id = row['request_id']
-                                st.session_state.info_message = None 
-                                st.rerun()
-                            else:
-                                st.session_state.error_message = "Failed to draft email. Please check sales notes and try again."
-                                st.session_state.info_message = None 
-                        else:
-                            st.session_state.error_message = f"Vehicle details for {row['vehicle']} not found in hardcoded data. Cannot draft email."
-                            st.session_state.info_message = None 
-
-            if selected_action == 'Follow Up Required' and f"draft_subject_{row['request_id']}" in st.session_state and f"draft_body_{row['request_id']}" in st.session_state:
-                draft_subject = st.session_state[f"draft_subject_{row['request_id']}"]
-                draft_body = st.session_state[f"draft_body_{row['request_id']}"]
-
-                st.subheader("Review Drafted Email:")
-                edited_subject = st.text_input("Subject:", value=draft_subject, key=f"reviewed_subject_{row['request_id']}")
-                edited_body = st.text_area("Body:", value=draft_body, height=300, key=f"reviewed_body_{row['request_id']}")
-
-                if ENABLE_EMAIL_SENDING:
-                    if st.button(f"Click to Send Drafted Email to {row['full_name']}", key=f"send_draft_email_btn_{row['request_id']}"):
-                        if send_email(row['email'], edited_subject, edited_body):
-                            st.session_state.pop(f"draft_subject_{row['request_id']}", None)
-                            st.session_state.pop(f"draft_body_{row['request_id']}", None)
-                            st.session_state.expanded_lead_id = row['request_id']
-                            st.rerun()
-                else:
-                    st.warning("Email sending is not configured. Please add SMTP credentials to secrets.")
-
-            # NEW: Logic for Dynamic Offer Suggestion (Added temporary placeholder for discussion)
+            # NEW: Display suggested offer if available in session state
             if 'offer_button' in locals() and offer_button: # Check if offer_button was clicked
                 st.session_state.info_message = "Generating personalized offer suggestion..."
                 offer_suggestion_details = {
@@ -800,10 +731,39 @@ if bookings_data:
                 st.session_state.info_message = None # Clear info message
                 st.rerun()
             
-            # Display suggested offer if available in session state
             if f"suggested_offer_{row['request_id']}" in st.session_state:
                 st.subheader("AI-Suggested Offer:")
                 st.markdown(st.session_state[f"suggested_offer_{row['request_id']}"])
+                st.markdown("---")
+
+
+            # NEW: Talking Points Button and Display (Added placeholder for now)
+            if selected_action == 'Call Scheduled' and 'call_talking_points_button' not in st.session_state: # To prevent re-showing button immediately
+                st.session_state.call_talking_points_button = False # Initialize
+            
+            if selected_action == 'Call Scheduled':
+                with st.columns([1,3,1])[0]: # Place button in a column
+                    generate_talking_points_button = st.form_submit_button("Generate Talking Points (AI)")
+                
+                if generate_talking_points_button:
+                    st.session_state.info_message = "Generating talking points..."
+                    talking_points_details = {
+                        "customer_name": row['full_name'],
+                        "vehicle_name": row['vehicle'],
+                        "current_vehicle": row['current_vehicle'],
+                        "lead_score_text": current_lead_score_text,
+                        "numeric_lead_score": current_numeric_lead_score,
+                        "sales_notes": new_sales_notes # Use the latest notes
+                    }
+                    generated_points = generate_call_talking_points(talking_points_details, AOE_VEHICLE_DATA.get(row['vehicle'], {}))
+                    st.session_state[f"call_talking_points_{row['request_id']}"] = generated_points
+                    st.session_state.expanded_lead_id = row['request_id']
+                    st.session_state.info_message = None
+                    st.rerun()
+            
+            if f"call_talking_points_{row['request_id']}" in st.session_state:
+                st.subheader("AI-Generated Talking Points:")
+                st.markdown(st.session_state[f"call_talking_points_{row['request_id']}"])
                 st.markdown("---")
 
 else:
