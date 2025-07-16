@@ -4,6 +4,7 @@ requests
 python-dotenv
 openai
 supabase==2.16.0
+markdown-it-py
 
 # SMTP & Email handling (comes with stdlib, but smtplib relies on these sometimes)
 email-validator
