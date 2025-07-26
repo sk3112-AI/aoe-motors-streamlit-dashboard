@@ -21,6 +21,18 @@ import markdown_it # Ensure 'markdown-it-py' is in your requirements.txt
 # Initialize MarkdownIt parser for converting AI output to HTML
 md_converter = markdown_it.MarkdownIt()
 
+# 1. Initialize session state
+if "expanded_lead_id" not in st.session_state:
+    st.session_state.expanded_lead_id = None
+
+# 2. Define the toggle callback
+def set_expanded_lead(request_id):
+    """Toggle the expander for this request_id."""
+    if st.session_state.expanded_lead_id == request_id:
+        st.session_state.expanded_lead_id = None
+    else:
+        st.session_state.expanded_lead_id = request_id
+
 # For IST timezone conversion for analytics
 try:
     from zoneinfo import ZoneInfo
