@@ -963,7 +963,7 @@ if bookings_data:
                         
                         if vehicle_details:
                             # draft_subject and draft_body will be Markdown from now on
-                            followup_subject, followup_body_markdown, = generate_followup_email( # ADDED                         
+                            followup_subject, followup_body_markdown, _ = generate_followup_email( # ADDED                         
                                 row['full_name'], row['email'], row['vehicle'], new_sales_notes, vehicle_details,
                                 current_vehicle_brand=current_vehicle_brand_val,
                                 sentiment=notes_sentiment
