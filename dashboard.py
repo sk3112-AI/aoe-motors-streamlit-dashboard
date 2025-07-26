@@ -963,7 +963,7 @@ if bookings_data:
                         
                         if vehicle_details:
                             # draft_subject and draft_body will be Markdown from now on
-                            followup_subject, followup_body_markdown = generate_followup_email( # Renamed for clarity
+                            followup_subject, followup_body_markdown, = generate_followup_email( # ADDED                         
                                 row['full_name'], row['email'], row['vehicle'], new_sales_notes, vehicle_details,
                                 current_vehicle_brand=current_vehicle_brand_val,
                                 sentiment=notes_sentiment
@@ -1020,7 +1020,7 @@ if bookings_data:
                     "numeric_lead_score": current_numeric_lead_score,
                     "sales_notes": new_sales_notes # Use the latest notes
                 }
-                suggested_offer_text = suggest_offer(offer_suggestion_details, AOE_VEHICLE_DATA.get(row['vehicle'], {}))
+                suggested_offer_text, _ = suggest_offer_llm(offer_suggestion_details, AOE_VEHICLE_DATA.get(row['vehicle'], {}))
                 st.session_state[f"suggested_offer_{row['request_id']}"] = suggested_offer_text
                 st.session_state.expanded_lead_id = row['request_id'] # Keep expanded
                 st.session_state.info_message = None # Clear info message
@@ -1045,7 +1045,7 @@ if bookings_data:
                     "numeric_lead_score": current_numeric_lead_score,
                     "sales_notes": new_sales_notes # Use the latest notes
                 }
-                generated_points = generate_call_talking_points(talking_points_details, AOE_VEHICLE_DATA.get(row['vehicle'], {}))
+                generated_points = generate_call_talking_points_llm(talking_points_details, AOE_VEHICLE_DATA.get(row['vehicle'], {}))
                 st.session_state[f"call_talking_points_{row['request_id']}"] = generated_points
                 st.session_state.expanded_lead_id = row['request_id']
                 st.session_state.info_message = None
