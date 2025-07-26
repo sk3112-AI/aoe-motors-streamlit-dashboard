@@ -5,13 +5,13 @@ from dotenv import load_dotenv
 import pandas as pd
 from openai import OpenAI
 import time
-import requests
+import requests # For making API calls to the new agent service
 from datetime import datetime, date, timedelta, timezone
 import json
 import logging
 import sys
 
-# ADDED SendGrid imports
+# ADDED SendGrid imports (retained for individual email sends from dashboard)
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 
@@ -53,16 +53,22 @@ if not openai_api_key:
     st.stop()
 openai_client = OpenAI(api_key=openai_api_key)
 
-# --- Email Configuration (for SendGrid) ---
+# --- Email Configuration (for SendGrid - for individual sends from this dashboard) ---
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 email_address = os.getenv("EMAIL_ADDRESS")
 
 ENABLE_EMAIL_SENDING = all([SENDGRID_API_KEY, email_address])
 if not ENABLE_EMAIL_SENDING:
-    logging.warning("SendGrid API Key or sender email not fully configured. Email sending will be disabled.")
-    st.warning("Email sending is disabled. Please ensure SENDGRID_API_KEY and EMAIL_ADDRESS environment variables are set.")
+    logging.warning("SendGrid API Key or sender email not fully configured. Email sending will be disabled (for individual dashboard sends).")
+    st.warning("Email sending is disabled (for individual dashboard sends). Please ensure SENDGRID_API_KEY and EMAIL_ADDRESS env vars are set.")
 
-BACKEND_API_URL = "https://aoe-agentic-demo.onrender.com"
+# --- NEW: URL for the separate Agent Service ---
+AUTOMOTIVE_AGENT_SERVICE_URL = os.getenv("AUTOMOTIVE_AGENT_SERVICE_URL")
+if not AUTOMOTIVE_AGENT_SERVICE_URL:
+    st.warning("AUTOMOTIVE_AGENT_SERVICE_URL is not set. Batch agent functionalities (Analytics NLQ, Batch Follow-up/Offers) will not function.")
+
+BACKEND_API_URL = "https://aoe-agentic-demo.onrender.com" # This might be the old main.py URL, ensure it's still needed or remove
+
 
 AOE_VEHICLE_DATA = {
     "AOE Apex": {
@@ -172,7 +178,7 @@ def log_email_interaction(request_id, event_type):
     except Exception as e:
         logging.error(f"Error logging email interaction for {request_id}: {e}", exc_info=True)
 
-# send_email function uses SendGrid API
+# send_email function uses SendGrid API (for individual sends from this dashboard)
 def send_email(recipient_email, subject, body, request_id=None, event_type="email_sent_dashboard"): # Added request_id, event_type
     if not ENABLE_EMAIL_SENDING:
         logging.error("SendGrid API Key or sender email not fully configured. Email sending is disabled.")
@@ -440,14 +446,14 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
     """
 
     try:
-        with st.spinner("Drafting email with AI..."):
+        with st.spinner("Drafting email with AI..."): # This spinner is for dashboard UI, not agent service
             completion = openai_client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": "You are a helpful and persuasive sales assistant for AOE Motors."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.0, # Adjusted temperature to 0 for more deterministic prompt response
+                temperature=0.0,
                 max_tokens=800
             )
             draft = completion.choices[0].message.content.strip()
@@ -459,28 +465,25 @@ def generate_followup_email(customer_name, customer_email, vehicle_name, sales_n
                 subject_line = f"Following up on your {vehicle_name} Test Drive"
                 body_content = draft
             
-            # NEW: Post-processing to ensure HTML <p> tags for spacing
-            # This post-processing is now for converting MARKDOWN to HTML for the SENT email.
-            # The prompt has been changed to request Markdown.
-            if body_content.strip() and not ("<p>" in body_content): # Check if AI did not include <p> tags
-                # Split by double newline for paragraphs, then re-join with <p> tags
+            # Post-processing to convert Markdown to HTML for sending
+            if body_content.strip() and not ("<p>" in body_content):
                 paragraphs = body_content.split('\n\n')
                 html_body_for_sending = "".join(f"<p>{p.strip()}</p>" for p in paragraphs if p.strip())
             else:
-                html_body_for_sending = body_content # Assume it's already HTML if <p> tags are found
+                html_body_for_sending = body_content
             
             logging.debug(f"Final Generated Body (Markdown for UI, partial): {body_content[:100]}...")
             logging.debug(f"Final HTML Body (for sending, partial): {html_body_for_sending[:100]}...")
             
-            return subject_line, html_body_for_sending # RETURN THE HTML VERSION FOR SENDING
+            return subject_line, body_content, html_body_for_sending # MODIFIED return tuple
+
     except Exception as e:
         logging.error(f"Error drafting email with AI: {e}", exc_info=True)
-        st.error(f"Error drafting email with AI: {e}")
-        return None, None
+        return None, None, None
 
-def generate_lost_email(customer_name, vehicle_name):
+# MODIFIED: generate_lost_email to use HTML <p> tags
+def generate_lost_email_html(customer_name, vehicle_name): # Renamed for clarity that it outputs HTML
     subject = f"We Miss You, {customer_name}!"
-    # MODIFIED: Wrapped body in <p> tags for proper HTML spacing
     body = f"""<p>Dear {customer_name},</p>
 <p>We noticed you haven't moved forward with your interest in the {vehicle_name}. We understand circumstances change, but we'd love to hear from you if you have any feedback or if there's anything we can do to help.</p>
 <p>Sincerely,</p>
@@ -488,9 +491,9 @@ def generate_lost_email(customer_name, vehicle_name):
 """
     return subject, body
 
-def generate_welcome_email(customer_name, vehicle_name):
+# MODIFIED: generate_welcome_email to use HTML <p> tags
+def generate_welcome_email_html(customer_name, vehicle_name): # Renamed for clarity that it outputs HTML
     subject = f"Welcome to the AOE Family, {customer_name}!"
-    # MODIFIED: generate_welcome_email to use <p> tags for spacing
     body = f"""<p>Dear {customer_name},</p>
 <p>Welcome to the AOE Motors family! We're thrilled you chose the {vehicle_name}.</p>
 <p>To help you get started, here are some important next steps and documents:</p>
@@ -506,14 +509,9 @@ def generate_welcome_email(customer_name, vehicle_name):
 """
     return subject, body
 
-def set_expanded_lead(request_id):
-    if st.session_state.expanded_lead_id == request_id:
-        st.session_state.expanded_lead_id = None
-    else:
-        st.session_state.expanded_lead_id = request_id
 
-# NEW: Function to suggest offer
-def suggest_offer(lead_details: dict, vehicle_data: dict) -> str:
+# NEW: Function to suggest offer for automation agent
+def suggest_offer_llm(lead_details: dict, vehicle_data: dict) -> tuple: # Returns (text_output, html_output)
     customer_name = lead_details.get("customer_name", "customer")
     vehicle_name = lead_details.get("vehicle_name", "vehicle")
     current_vehicle = lead_details.get("current_vehicle", "N/A")
@@ -528,7 +526,7 @@ def suggest_offer(lead_details: dict, vehicle_data: dict) -> str:
         offer_prompt_advice = "Since the lead is Cold, advise to wait and understand interest. Absolutely DO NOT suggest any immediate offers like discounts or financing. Focus on observation."
     else: # Hot or Warm
         offer_prompt_advice = f"""
-        - Suggest a personalized offer type (e.g., "Discount", "Financing Option", "Extended Warranty", "Roadside Assistance").
+        - Suggest a personalized offer type (e.g., "Complimentary Service Package", "Extended Warranty", "EV Charger for Home", "Discount (e.g., 5-10% off accessories)", "Special Financing Option").
         - Consider the customer's current vehicle ({current_vehicle}), their expressed interest ({vehicle_name}), and any concerns in sales notes ("{sales_notes}").
         - Mention a specific feature of {vehicle_name} ({vehicle_features}) if relevant to the offer.
         - For pricing/cost concerns, focus on financing options or potential discounts. For safety/performance, extended warranty or roadside assistance.
@@ -563,21 +561,18 @@ def suggest_offer(lead_details: dict, vehicle_data: dict) -> str:
             max_tokens=200
         )
         raw_output = completion.choices[0].message.content.strip()
-        # Ensure markdown paragraphs/lists for UI readability
-        if not (raw_output.startswith("AI Offer Suggestion:") and ("*" in raw_output or "-" in raw_output or "\n\n" in raw_output)):
-            # If no clear markdown formatting, try to convert lines to paragraphs
-            paragraphs = raw_output.split('\n\n')
-            formatted_output = "AI Offer Suggestion:\n\n" + "\n\n".join(f"{p.strip()}" for p in paragraphs if p.strip())
-        else:
-            formatted_output = raw_output # Already has some markdown, just return as is
+        
+        # Convert Markdown output to HTML for email sending
+        html_output = md_converter.render(raw_output)
 
-        return formatted_output
+        return raw_output, html_output # Return both markdown and html
     except Exception as e:
         logging.error(f"Error suggesting offer: {e}", exc_info=True)
-        return "Error generating offer suggestion. Please try again."
+        return "Error generating offer suggestion. Please try again.", "Error generating offer suggestion. Please try again."
 
-# NEW: Function to generate call talking points
-def generate_call_talking_points(lead_details: dict, vehicle_data: dict) -> str:
+
+# NEW: Function to generate call talking points for automation agent
+def generate_call_talking_points_llm(lead_details: dict, vehicle_data: dict) -> str:
     customer_name = lead_details.get("customer_name", "customer")
     vehicle_name = lead_details.get("vehicle_name", "vehicle")
     current_vehicle = lead_details.get("current_vehicle", "N/A")
@@ -633,161 +628,9 @@ def generate_call_talking_points(lead_details: dict, vehicle_data: dict) -> str:
     except Exception as e:
         logging.error(f"Error generating talking points: {e}", exc_info=True)
         return "Error generating talking points. Please try again."
-def interpret_and_query(query_text, all_bookings_df):
-    query = query_text.lower().strip()
 
-    # Time zone conversion for current time (IST - Asia/Kolkata)
-    # Ensure current time is also timezone-aware for comparison with timestampz
-    try:
-        from zoneinfo import ZoneInfo
-        IST_TZ = ZoneInfo('Asia/Kolkata')
-    except ImportError:
-        logging.warning("zoneinfo (or tzdata) not available. Using fixed offset for IST. Install 'tzdata' for full timezone support.")
-        IST_TZ = timezone(timedelta(hours=5, minutes=30)) # Fallback for fixed offset
+# --- Removed interpret_and_query from here, it's now in the new service ---
 
-    today_dt_ist = datetime.now(IST_TZ) # Get current time in IST
-    today_dt_utc = today_dt_ist.astimezone(timezone.utc) # Convert IST today to UTC for DB comparison
-
-    # Define various timeframes based on UTC date for consistency with DB
-    yesterday_dt_utc = (today_dt_ist - timedelta(days=1)).astimezone(timezone.utc)
-    last_week_start_dt_utc = (today_dt_ist - timedelta(days=7)).astimezone(timezone.utc)
-    last_month_start_dt_utc = (today_dt_ist - timedelta(days=30)).astimezone(timezone.utc)
-    last_year_start_dt_utc = (today_dt_ist - timedelta(days=365)).astimezone(timezone.utc)
-
-
-    if not all_bookings_df.empty:
-        # Ensure booking_timestamp is datetime for proper filtering
-        if not pd.api.types.is_datetime64_any_dtype(all_bookings_df['booking_timestamp']):
-            all_bookings_df['booking_timestamp'] = pd.to_datetime(all_bookings_df['booking_timestamp'])
-        
-        # If naive, localize to UTC (assuming DB timestampz without explicit tzinfo is UTC)
-        # If already localized, convert to UTC for consistency
-        if all_bookings_df['booking_timestamp'].dt.tz is None:
-            all_bookings_df['booking_timestamp'] = all_bookings_df['booking_timestamp'].dt.tz_localize('UTC')
-        else:
-            all_bookings_df['booking_timestamp'] = all_bookings_df['booking_timestamp'].dt.tz_convert('UTC')
-
-    # Define the types of queries the LLM can interpret and provide few-shot examples
-    # MODIFIED: Prompt to include Warm/Cold leads, location, and refined output format
-    prompt = f"""
-    Analyze the following user query about automotive leads.
-    Extract the 'lead_status', 'time_frame', and optionally 'location'.
-    Return a JSON object with 'lead_status', 'time_frame', and 'location'.
-    If the query cannot be interpreted, return {{"query_type": "UNINTERPRETED"}}.
-
-    Lead Statuses: "Hot", "Warm", "Cold", "Converted", "Lost", "All" (if no specific status is mentioned but asking for total leads, e.g., "total leads today").
-    Time Frames: "TODAY", "YESTERDAY", "LAST_WEEK" (last 7 days), "LAST_MONTH" (last 30 days), "LAST_YEAR" (last 365 days), "ALL_TIME".
-    Locations: "New York", "Los Angeles", "Chicago", "Houston", "Miami", "All Locations" (if no specific location is mentioned, e.g., "total leads in New York").
-
-    Examples:
-    - User: "how many hot leads last week in New York?"
-    - Output: {{"lead_status": "Hot", "time_frame": "LAST_WEEK", "location": "New York"}}
-
-    - User: "total leads today"
-    - Output: {{"lead_status": "All", "time_frame": "TODAY", "location": "All Locations"}}
-
-    - User: "cold leads from Houston"
-    - Output: {{"lead_status": "Cold", "time_frame": "ALL_TIME", "location": "Houston"}}
-
-    - User: "total conversions"
-    - Output: {{"lead_status": "Converted", "time_frame": "ALL_TIME", "location": "All Locations"}}
-
-    - User: "leads lost yesterday"
-    - Output: {{"lead_status": "Lost", "time_frame": "YESTERDAY", "location": "All Locations"}}
-
-    - User: "warm leads last month"
-    - Output: {{"lead_status": "Warm", "time_frame": "LAST_MONTH", "location": "All Locations"}}
-
-    User Query: "{query_text}"
-    """
-    
-    try:
-        with st.spinner("Interpreting query..."):
-            completion = openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a helpful AI assistant that interprets user queries about sales data and outputs a JSON object. Only use the provided categories and timeframes."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.0, # Keep low for deterministic JSON output
-                max_tokens=150, # Increased max_tokens slightly for more complex JSON
-                response_format={"type": "json_object"}
-            )
-            response_json = json.loads(completion.choices[0].message.content.strip())
-            
-            # Extract interpreted filters
-            lead_status_filter = response_json.get("lead_status")
-            time_frame_filter = response_json.get("time_frame")
-            location_filter_nlq = response_json.get("location")
-
-            # Check if LLM returned "UNINTERPRETED" explicitly
-            if response_json.get("query_type") == "UNINTERPRETED": # This can come if LLM does not return structured JSON.
-                 return "This cannot be processed now - Restricted for demo. Please try queries about specific lead types (Hot, Warm, Cold, Converted, Lost), locations, or timeframes (today, last week, last month)."
-
-            filtered_df = all_bookings_df.copy()
-
-            # Apply time filter based on the NLQ interpreted timeframe (using UTC dates)
-            if time_frame_filter == "TODAY":
-                filtered_df = filtered_df[filtered_df['booking_timestamp'].dt.date == today_dt_utc.date()]
-            elif time_frame_filter == "YESTERDAY":
-                filtered_df = filtered_df[filtered_df['booking_timestamp'].dt.date == yesterday_dt_utc.date()]
-            elif time_frame_filter == "LAST_WEEK":
-                filtered_df = filtered_df[filtered_df['booking_timestamp'] >= last_week_start_dt_utc]
-            elif time_frame_filter == "LAST_MONTH":
-                filtered_df = filtered_df[filtered_df['booking_timestamp'] >= last_month_start_dt_utc]
-            elif time_frame_filter == "LAST_YEAR":
-                filtered_df = filtered_df[filtered_df['booking_timestamp'] >= last_year_start_dt_utc]
-            # "ALL_TIME" means no date filter applied here, it relies on sidebar filters
-
-            # Apply lead status filter
-            if lead_status_filter and lead_status_filter != "All":
-                if lead_status_filter in ["Converted", "Lost"]: # These map to action_status
-                    filtered_df = filtered_df[filtered_df['action_status'] == lead_status_filter]
-                else: # Hot, Warm, Cold map to lead_score
-                    filtered_df = filtered_df[filtered_df['lead_score'].str.lower() == lead_status_filter.lower()]
-                
-            # Apply location filter
-            if location_filter_nlq and location_filter_nlq != "All Locations":
-                filtered_df = filtered_df[filtered_df['location'] == location_filter_nlq]
-            
-            result_count = filtered_df.shape[0]
-            
-            # --- Format the output message ---
-            message_parts = []
-            if lead_status_filter and lead_status_filter != "All":
-                message_parts.append(f"{lead_status_filter.lower()} leads")
-            else:
-                message_parts.append("total leads")
-            
-            if time_frame_filter != "ALL_TIME":
-                message_parts.append(f" {time_frame_filter.lower().replace('_', ' ')}")
-            
-            if location_filter_nlq and location_filter_nlq != "All Locations":
-                message_parts.append(f" in {location_filter_nlq}")
-            
-            # Clarify that results are within the sidebar's filters
-            sidebar_date_range_str = ""
-            # Ensure sidebar_start_date and sidebar_end_date exist in session state before accessing
-            if st.session_state.get('sidebar_start_date') and st.session_state.get('sidebar_end_date'):
-                s_date = st.session_state['sidebar_start_date'].strftime('%b %d, %Y')
-                e_date = st.session_state['sidebar_end_date'].strftime('%b %d, %Y')
-                sidebar_date_range_str = f" (filtered from {s_date} to {e_date})"
-            
-            result_message = f"📊 {' '.join(message_parts).capitalize()}: **{result_count}**{sidebar_date_range_str}"
-
-            # New: "refine time period" message logic
-            # This check uses the actual sidebar filter dates
-            if result_count == 0 and (st.session_state.get('sidebar_end_date', date.today()) - st.session_state.get('sidebar_start_date', date.today())).days < 7: # If filter period is less than 7 days
-                result_message += "<br>Consider expanding the date range in the sidebar filters if you expect more results."
-            
-            return result_message
-
-    except json.JSONDecodeError:
-        logging.error("LLM did not return a valid JSON.", exc_info=True)
-        return "LLM did not return a valid JSON. This cannot be processed now - Restricted for demo. Please try queries like 'total leads today', 'hot leads last week', 'total conversions', or 'leads lost'."
-    except Exception as e:
-        logging.error(f"Error processing query: {e}", exc_info=True)
-        return "An error occurred while processing your query. This cannot be processed now - Restricted for demo."
 
 # --- MAIN DASHBOARD DISPLAY LOGIC (STRICTLY AFTER ALL DEFINITIONS) ---
 
@@ -839,15 +682,119 @@ if bookings_data:
     df['booking_timestamp'] = pd.to_datetime(df['booking_timestamp'])
     df = df.sort_values(by='booking_timestamp', ascending=False)
 
-    # --- Text-to-Query Section ---
+    # --- NEW: Batch Automation Agent Triggers ---
+    st.subheader("Automated Agent Actions")
+    st.markdown("Use these buttons to trigger agents to process leads in the **current filtered view**.")
+    
+    col_batch_buttons = st.columns(2)
+    
+    with col_batch_buttons[0]:
+        if st.button("Use Agent to Send Follow-ups", key="batch_followup_btn"):
+            if AUTOMOTIVE_AGENT_SERVICE_URL:
+                leads_to_process = df[df['action_status'] == 'Follow Up Required']['request_id'].tolist()
+                if not leads_to_process:
+                    st.session_state.info_message = "No leads with 'Follow Up Required' status in the current filtered view."
+                else:
+                    st.session_state.info_message = f"Dispatching agent to send follow-up emails for {len(leads_to_process)} leads..."
+                    try:
+                        response = requests.post(
+                            f"{AUTOMOTIVE_AGENT_SERVICE_URL}/trigger-batch-followup-email-agent",
+                            json={
+                                "lead_ids": leads_to_process,
+                                "selected_location": selected_location, # Pass context
+                                "start_date": start_date.isoformat(),
+                                "end_date": end_date.isoformat()
+                            },
+                            timeout=120 # Give agents more time
+                        )
+                        response.raise_for_status() # Raise an exception for HTTP errors (4xx or 5xx)
+                        result = response.json()
+                        st.session_state.success_message = result.get("message", "Batch follow-up agent triggered successfully.")
+                    except requests.exceptions.Timeout:
+                        st.session_state.error_message = "Batch follow-up agent timed out. Please check service logs."
+                    except requests.exceptions.RequestException as e:
+                        st.session_state.error_message = f"Error communicating with batch follow-up agent: {e}"
+                    except json.JSONDecodeError:
+                        st.session_state.error_message = "Received invalid JSON from batch follow-up agent."
+                st.rerun()
+            else:
+                st.warning("Automated Agent Service URL not configured.")
+
+    with col_batch_buttons[1]:
+        if st.button("Use Agent to Send Offers", key="batch_offer_btn"):
+            if AUTOMOTIVE_AGENT_SERVICE_URL:
+                # Select leads with lead score > 12 and not Lost/Converted
+                leads_to_process = df[
+                    (df['numeric_lead_score'] > 12) & 
+                    (~df['action_status'].isin(['Lost', 'Converted']))
+                ]['request_id'].tolist()
+
+                if not leads_to_process:
+                    st.session_state.info_message = "No leads with score > 12 (and not Lost/Converted) in the current filtered view."
+                else:
+                    st.session_state.info_message = f"Dispatching agent to send offers for {len(leads_to_process)} leads..."
+                    try:
+                        response = requests.post(
+                            f"{AUTOMOTIVE_AGENT_SERVICE_URL}/trigger-batch-offer-agent",
+                            json={
+                                "lead_ids": leads_to_process,
+                                "selected_location": selected_location, # Pass context
+                                "start_date": start_date.isoformat(),
+                                "end_date": end_date.isoformat()
+                            },
+                            timeout=120
+                        )
+                        response.raise_for_status()
+                        result = response.json()
+                        st.session_state.success_message = result.get("message", "Batch offer agent triggered successfully.")
+                    except requests.exceptions.Timeout:
+                        st.session_state.error_message = "Batch offer agent timed out. Please check service logs."
+                    except requests.exceptions.RequestException as e:
+                        st.session_state.error_message = f"Error communicating with batch offer agent: {e}"
+                    except json.JSONDecodeError:
+                        st.session_state.error_message = "Received invalid JSON from batch offer agent."
+                st.rerun()
+            else:
+                st.warning("Automated Agent Service URL not configured.")
+    
+    st.markdown("---") # Separator after batch buttons
+
+
+    # --- Text-to-Query Section (NOW CALLS AGENT SERVICE) ---
     st.subheader("Analytics - Ask a Question! 🤖")
     query_text = st.text_input(
         "Type your question (e.g., 'total leads today', 'hot leads last week', 'total conversions', 'leads lost'):",
         key="nlq_query_input"
     )
     if query_text:
-        result_message = interpret_and_query(query_text, df)
-        st.markdown(result_message)
+        if AUTOMOTIVE_AGENT_SERVICE_URL:
+            st.session_state.info_message = "Querying analytics agent..."
+            try:
+                # Make API call to the new agent service for analytics
+                response = requests.post(
+                    f"{AUTOMOTIVE_AGENT_SERVICE_URL}/analyze-query",
+                    json={
+                        "query_text": query_text,
+                        "selected_location": selected_location,
+                        "start_date": start_date.isoformat(), # Pass date as ISO string
+                        "end_date": end_date.isoformat()    # Pass date as ISO string
+                    },
+                    timeout=60 # Add a timeout
+                )
+                response.raise_for_status() # Raise an exception for HTTP errors (4xx or 5xx)
+                result = response.json()
+                result_message = result.get("result_message", "No result message from analytics agent.")
+                st.markdown(result_message)
+                st.session_state.info_message = None # Clear info message
+            except requests.exceptions.Timeout:
+                st.session_state.error_message = "Analytics query timed out. Please try again."
+            except requests.exceptions.RequestException as e:
+                st.session_state.error_message = f"Error communicating with analytics agent: {e}"
+            except json.JSONDecodeError:
+                st.session_state.error_message = "Received invalid JSON from analytics agent."
+            st.rerun() # Rerun to display messages or results
+        else:
+            st.warning("Analytics service URL not configured. Please set AUTOMOTIVE_AGENT_SERVICE_URL.")
     st.markdown("---")
 
     for index, row in df.iterrows():
@@ -856,13 +803,36 @@ if bookings_data:
         current_lead_score_text = row.get('lead_score', "New")
 
 
+        # NEW: Logic for Lead Insights Agent Indicator
+        score_trend_indicator = ""
+        initial_numeric_score_map = {
+            "0-3-months": 10,
+            "3-6-months": 7,
+            "6-12-months": 5,
+            "exploring-now": 2
+        }
+        # Safely get initial score, default to current if timeframe is unexpected
+        initial_lead_score = initial_numeric_score_map.get(row.get('time_frame'), current_numeric_lead_score) 
+
+        # Only show indicator if there's a meaningful change and score is not zero
+        if current_numeric_lead_score > initial_lead_score and current_numeric_lead_score > 0:
+            if current_lead_score_text == "Hot":
+                score_trend_indicator = " 🔥📈" # Moved to Hot
+            elif current_lead_score_text == "Warm":
+                score_trend_indicator = " 🟡📈" # Moved to Warm (from Cold)
+        elif current_numeric_lead_score < initial_lead_score:
+            score_trend_indicator = " ❄️📉" # Dropped in score
+        
+        # Add a subtle indicator for leads that were initially cold/warm and became hot/warm
+        # This part assumes initial_lead_score is correctly inferred from time_frame
+        
         available_actions = ACTION_STATUS_MAP.get(current_lead_score_text, ACTION_STATUS_MAP["New"])
 
         expander_key = f"expander_{row['request_id']}"
         is_expanded = (st.session_state.expanded_lead_id == row['request_id'])
 
         with st.expander(
-            f"**{row['full_name']}** - {row['vehicle']} - Status: **{current_action}** (Score: {current_lead_score_text} - {current_numeric_lead_score} points)",
+            f"**{row['full_name']}** - {row['vehicle']} - Status: **{current_action}** (Score: {current_lead_score_text} - {current_numeric_lead_score} points){score_trend_indicator}", # ADDED indicator
             expanded=is_expanded
         ):
             st.button("Toggle Details", key=f"toggle_{row['request_id']}", on_click=set_expanded_lead, args=(row['request_id'],))
@@ -897,17 +867,17 @@ if bookings_data:
                     disabled=not is_sales_notes_editable
                 )
 
-                col_buttons_form = st.columns([1,1]) # Use col_buttons_form for buttons INSIDE the form
+                col_buttons_form = st.columns([1,1]) # Buttons inside the form
 
                 with col_buttons_form[0]:
                     save_button = st.form_submit_button("Save Updates")
 
-                # The Draft Email button remains inside the form
                 if selected_action == 'Follow Up Required':
                     with col_buttons_form[1]:
+                        # This button remains inside the form
                         draft_email_button = st.form_submit_button("Draft Follow-up Email")
                 
-            # --- START AI BUTTONS OUTSIDE THE FORM ---
+            # --- START AI BUTTONS OUTSIDE THE FORM (Manual Triggers to Local Dashboard Logic) ---
             # These buttons are not tied to the form submission,
             # allowing immediate actions without saving other form inputs.
             # Initialize session state keys for each button click status for this row
@@ -919,9 +889,9 @@ if bookings_data:
             if talking_points_button_clicked_key not in st.session_state:
                 st.session_state[talking_points_button_clicked_key] = False
             
-            ai_buttons_cols = st.columns([1,1]) # Create new columns for these two buttons outside the form
+            ai_individual_buttons_cols = st.columns([1,1]) # Create new columns for these two buttons outside the form
 
-            with ai_buttons_cols[0]:
+            with ai_individual_buttons_cols[0]:
                 if selected_action not in ['Lost', 'Converted']: # Only show if not Lost/Converted
                     if st.button("Suggest Offer (AI)", key=f"suggest_offer_btn_outside_{row['request_id']}"):
                         st.session_state[offer_button_clicked_key] = True # Set clicked state for this specific row
@@ -930,7 +900,7 @@ if bookings_data:
                 else:
                     st.info("Offer suggestion not applicable for this status.") # Display message if not applicable
 
-            with ai_buttons_cols[1]:
+            with ai_individual_buttons_cols[1]:
                 if selected_action == 'Call Scheduled': # Only show if status is Call Scheduled
                     if st.button("Generate Talking Points (AI)", key=f"generate_talking_points_btn_outside_{row['request_id']}"):
                         st.session_state[talking_points_button_clicked_key] = True # Set clicked state for this specific row
@@ -1013,7 +983,7 @@ if bookings_data:
                 st.markdown(draft_body_markdown, unsafe_allow_html=True) # Render markdown here
                 
                 # Hidden text area to capture edits, if desired (currently disabled)
-                # You can make this editable_body below visible for editing if needed
+                # editable_body_input = st.text_area("Edit Body", value=draft_body_markdown, height=300, key=f"editable_body_{row['request_id']}")
                 edited_body_html_for_sending = md_converter.render(draft_body_markdown) # Convert Markdown to HTML for sending
 
                 if ENABLE_EMAIL_SENDING:
