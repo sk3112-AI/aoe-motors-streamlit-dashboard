@@ -79,6 +79,11 @@ AUTOMOTIVE_AGENT_SERVICE_URL = os.getenv("AUTOMOTIVE_AGENT_SERVICE_URL")
 if not AUTOMOTIVE_AGENT_SERVICE_URL:
     st.warning("AUTOMOTIVE_AGENT_SERVICE_URL is not set. Batch agent functionalities (Analytics NLQ, Batch Follow-up/Offers) will not function.")
 
+# NEW: URL for the Personalized Ad Service
+PERSONALIZED_AD_SERVICE_URL = os.getenv("PERSONALIZED_AD_SERVICE_URL")
+if not PERSONALIZED_AD_SERVICE_URL:
+    st.warning("PERSONALIZED_AD_SERVICE_URL is not set. The 'Send Personalized Ad' button will not function.")
+
 BACKEND_API_URL = "https://aoe-agentic-demo.onrender.com" # This might be the old main.py URL, ensure it's still needed or remove
 
 
@@ -768,6 +773,39 @@ if bookings_data:
                 st.rerun()
             else:
                 st.warning("Automated Agent Service URL not configured.")
+
+    with col_batch_buttons[2]:
+        if st.button("Use Agent to Send Personalized Ads", key="batch_ad_btn"):
+            if PERSONALIZED_AD_SERVICE_URL:
+                # Filter for leads with lead score > 10 and not Lost/Converted
+                leads_to_process = df[
+                    (df['numeric_lead_score'] > 10) & 
+                    (~df['action_status'].isin(['Lost', 'Converted']))
+                ]['request_id'].tolist()
+                
+                if not leads_to_process:
+                    st.session_state.info_message = "No leads with score > 10 (and not Lost/Converted) in the current filtered view."
+                else:
+                    st.session_state.info_message = f"Dispatching agent to send personalized ads to {len(leads_to_process)} leads..."
+                    try:
+                        # Call the new personalized ad service for each lead
+                        for lead_id in leads_to_process:
+                            response = requests.post(
+                                f"{PERSONALIZED_AD_SERVICE_URL}/send-ad-email",
+                                json={"request_id": lead_id},
+                                timeout=60
+                            )
+                            response.raise_for_status()
+                        st.session_state.success_message = f"Personalized ad emails triggered successfully for {len(leads_to_process)} leads."
+                    except requests.exceptions.Timeout:
+                        st.session_state.error_message = "Personalized ad agent timed out. Please check service logs."
+                    except requests.exceptions.RequestException as e:
+                        st.session_state.error_message = f"Error communicating with personalized ad agent: {e}"
+                    except json.JSONDecodeError:
+                        st.session_state.error_message = "Received invalid JSON from personalized ad agent."
+                st.rerun()
+            else:
+                st.warning("Personalized Ad Service URL not configured.")
     
     st.markdown("---") # Separator after batch buttons
 
