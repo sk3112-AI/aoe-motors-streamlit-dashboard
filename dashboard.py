@@ -703,7 +703,7 @@ if bookings_data:
     st.subheader("Automated Agent Actions")
     st.markdown("Use these buttons to trigger agents to process leads in the **current filtered view**.")
     
-    col_batch_buttons = st.columns(2)
+    col_batch_buttons = st.columns(3)#added 3 buttons
     
     with col_batch_buttons[0]:
         if st.button("Use Agent to Send Follow-ups", key="batch_followup_btn"):
