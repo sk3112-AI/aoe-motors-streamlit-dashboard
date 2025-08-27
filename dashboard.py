@@ -11,6 +11,14 @@ import json
 import logging
 import sys
 
+#helper funciton
+def label_from_numeric(score) -> str:
+    try:
+        n = int(score or 0)
+    except Exception:
+        n = 0
+    return "Hot" if n >= 10 else ("Warm" if n >= 5 else "Cold")
+
 # ADDED SendGrid imports (retained for individual email sends from dashboard)
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
@@ -850,7 +858,7 @@ if bookings_data:
     for index, row in df.iterrows():
         current_action = row['action_status']
         current_numeric_lead_score = row.get('numeric_lead_score', 0)
-        current_lead_score_text = row.get('lead_score', "New")
+        current_lead_score_text = label_from_numeric(current_numeric_lead_score)
 
 
         # NEW: Logic for Lead Insights Agent Indicator
