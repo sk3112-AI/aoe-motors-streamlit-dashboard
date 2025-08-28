@@ -815,7 +815,7 @@ if bookings_data:
             else:
                 st.warning("Personalized Ad Service URL not configured.")
 
-    with col_batch_buttons[3]:  # ADDED AND CHANGED INENDATION
+    with col_batch_buttons[3]:  # ADDED AND CHANGED INENDATION - for the second time
         if st.button("Mark Test Drives Due (24h)", key="mark_due_btn"):
             if not AUTOMOTIVE_AGENT_SERVICE_URL:
                 st.warning("Automated Agent Service URL not configured.")
@@ -835,11 +835,11 @@ if bookings_data:
                         f"Emails sent: {result.get('emails_sent', 0)} • "
                         f"Skipped (already due): {result.get('skipped_already_due', 0)}"
                     )
-            except requests.exceptions.Timeout:
-                st.session_state.error_message = "⏳ Test-drive reminder call timed out."
-            except requests.exceptions.RequestException as e:
-                st.session_state.error_message = f"❌ Failed to call the agent service: {e}"
-        st.rerun()
+                except requests.exceptions.Timeout:
+                    st.session_state.error_message = "⏳ Test-drive reminder call timed out."
+                except requests.exceptions.RequestException as e:
+                    st.session_state.error_message = f"❌ Failed to call the agent service: {e}"
+            st.rerun()
 
     # --- Text-to-Query Section (NOW CALLS AGENT SERVICE) ---
     st.subheader("Analytics - Ask a Question! 🤖")
