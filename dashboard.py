@@ -815,27 +815,30 @@ if bookings_data:
             else:
                 st.warning("Personalized Ad Service URL not configured.")
 
-    with col_batch_buttons[3]:#ADDED
-    if st.button("Mark Test Drives Due (24h)", key="mark_due_btn"):
-        if AUTOMOTIVE_AGENT_SERVICE_URL:
-            try:
-                resp = requests.post(
+    with col_batch_buttons[3]:  # ADDED AND CHANGED INENDATION
+        if st.button("Mark Test Drives Due (24h)", key="mark_due_btn"):
+            if not AUTOMOTIVE_AGENT_SERVICE_URL:
+                st.warning("Automated Agent Service URL not configured.")
+            else:
+                try:
+                    resp = requests.post(
                     f"{AUTOMOTIVE_AGENT_SERVICE_URL}/ops/mark-testdrives-due",
                     timeout=60,
-                )
-                resp.raise_for_status()
-                result = resp.json()
-                st.session_state.success_message = (
-                    f"Marked '{result.get('updated_status_to_due', 0)}' leads as 'Test Drive Due' "
-                    f"and sent {result.get('emails_sent', 0)} reminders. "
-                    f"(Window: {result.get('window_start','?')} → {result.get('window_end','?')})"
-                )
+                    )
+                    resp.raise_for_status()
+                    result = resp.json()
+                    st.session_state.success_message = (
+                        "✅ Test-drive reminders run complete — "
+                        f"Target date: {result.get('target_booking_date', '?')} • "
+                        f"Found: {result.get('found', 0)} • "
+                        f"Updated to 'Test Drive Due': {result.get('updated_status_to_due', 0)} • "
+                        f"Emails sent: {result.get('emails_sent', 0)} • "
+                        f"Skipped (already due): {result.get('skipped_already_due', 0)}"
+                    )
             except requests.exceptions.Timeout:
-                st.session_state.error_message = "Test-drive reminder call timed out."
+                st.session_state.error_message = "⏳ Test-drive reminder call timed out."
             except requests.exceptions.RequestException as e:
-                st.session_state.error_message = f"Failed to call the agent service: {e}"
-        else:
-            st.warning("Automated Agent Service URL not configured.")
+                st.session_state.error_message = f"❌ Failed to call the agent service: {e}"
         st.rerun()
 
     # --- Text-to-Query Section (NOW CALLS AGENT SERVICE) ---
