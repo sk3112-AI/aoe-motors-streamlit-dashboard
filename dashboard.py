@@ -711,7 +711,7 @@ if bookings_data:
     st.subheader("Automated Agent Actions")
     st.markdown("Use these buttons to trigger agents to process leads in the **current filtered view**.")
     
-    col_batch_buttons = st.columns(4)#added 3 buttons
+    col_batch_buttons = st.columns(4)#added 4 buttons
     
     with col_batch_buttons[0]:
         if st.button("Use Agent to Send Follow-ups", key="batch_followup_btn"):
@@ -814,21 +814,29 @@ if bookings_data:
                 st.rerun()
             else:
                 st.warning("Personalized Ad Service URL not configured.")
-    
-    with col_batch_buttons[3:
-        if st.button("⏰ Test-Drive Due Reminders"):
-        # NEW: calls your backend ops route (implemented in automotive_agent_service.py)
-        try:
-            r = requests.post(f"{API_BASE}/ops/mark-testdrives-due", timeout=20)
-            if r.status_code == 200:
-                st.success("✅ Reminder emails sent to the sales team for upcoming test drives.")
-            else:
-                st.error(f"❌ Backend returned {r.status_code}: {r.text}")
-        except Exception as e:
-            st.error(f"Request failed: {e}")   
 
-    st.markdown("---") # Separator after batch buttons
-
+    with col_batch_buttons[3]:#ADDED
+    if st.button("Mark Test Drives Due (24h)", key="mark_due_btn"):
+        if AUTOMOTIVE_AGENT_SERVICE_URL:
+            try:
+                resp = requests.post(
+                    f"{AUTOMOTIVE_AGENT_SERVICE_URL}/ops/mark-testdrives-due",
+                    timeout=60,
+                )
+                resp.raise_for_status()
+                result = resp.json()
+                st.session_state.success_message = (
+                    f"Marked '{result.get('updated_status_to_due', 0)}' leads as 'Test Drive Due' "
+                    f"and sent {result.get('emails_sent', 0)} reminders. "
+                    f"(Window: {result.get('window_start','?')} → {result.get('window_end','?')})"
+                )
+            except requests.exceptions.Timeout:
+                st.session_state.error_message = "Test-drive reminder call timed out."
+            except requests.exceptions.RequestException as e:
+                st.session_state.error_message = f"Failed to call the agent service: {e}"
+        else:
+            st.warning("Automated Agent Service URL not configured.")
+        st.rerun()
 
     # --- Text-to-Query Section (NOW CALLS AGENT SERVICE) ---
     st.subheader("Analytics - Ask a Question! 🤖")
