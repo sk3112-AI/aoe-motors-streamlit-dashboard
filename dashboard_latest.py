@@ -727,16 +727,19 @@ with col_sidebar2:
 # Fetch all data needed for the dashboard with filters
 bookings_data = fetch_bookings_data(selected_location, start_date, end_date)
 
-if not bookings_data:
-    st.info("No test drive bookings to display yet. Submit a booking from your frontend!")
-    st.stop()
-    
-else:
+if bookings_data:
     df = pd.DataFrame(bookings_data)
     df['booking_timestamp'] = pd.to_datetime(df['booking_timestamp'])
     df = df.sort_values(by='booking_timestamp', ascending=False)
 # Prefetch AI rolling summaries for all currently visible leads
     insights_map = fetch_ai_insights_map(df['request_id'].tolist())
+
+# After you create df / bookings for the selected filters:
+else:
+    st.info("No test drive bookings to display yet. Submit a booking from your frontend!")
+    st.stop()
+    insights_map = fetch_ai_insights_map(df['request_id'].tolist())
+
 
     # --- NEW: Batch Automation Agent Triggers ---
     st.subheader("Automated Agent Actions")
