@@ -734,6 +734,12 @@ if bookings_data:
 # Prefetch AI rolling summaries for all currently visible leads
     insights_map = fetch_ai_insights_map(df['request_id'].tolist())
 
+# After you create df / bookings for the selected filters:
+else:
+    st.info("No test drive bookings to display yet. Submit a booking from your frontend!")
+    st.stop()
+    insights_map = fetch_ai_insights_map(df['request_id'].tolist())
+
 
     # --- NEW: Batch Automation Agent Triggers ---
     st.subheader("Automated Agent Actions")
@@ -941,110 +947,114 @@ if bookings_data:
         is_expanded = (st.session_state.expanded_lead_id == row['request_id'])
 
         with st.expander(
-            f"**{row['full_name']}** - {row['vehicle']} - Status: **{current_action}** (Score: {current_lead_score_text} - {current_numeric_lead_score} points){score_trend_indicator}", # ADDED indicator
-            expanded=is_expanded
+            f"**{row['full_name']}** - {row['vehicle']} - Status: **{current_action}** "
+            f"(Score: {current_lead_score_text} - {current_numeric_lead_score} points){score_trend_indicator}",
+            expanded=is_expanded,
         ):
-            st.button("Toggle Details", key=f"toggle_{row['request_id']}", on_click=set_expanded_lead, args=(row['request_id'],))
+            # Two-column layout *inside* the expander
+            col_main, col_rail = st.columns([3, 2], gap="large")
 
-            # Split the expander into a main column and a right rail
-col_main, col_rail = st.columns([3, 2], gap="large")
+    # -------------------- LEFT (lead details + form) --------------------
+            with col_main:
+                st.button(
+                    "Toggle Details",
+                    key=f"toggle_{row['request_id']}",
+                    on_click=set_expanded_lead,
+                    args=(row['request_id'],),
+                )
 
-# -------------------- LEFT (your existing content) --------------------
-with col_main:
-    st.write(f"**Email:** {row['email']}")
-    st.write(f"**Location:** {row['location']}")
-    st.write(f"**Booking Date:** {row['booking_date']}")
-    st.write(f"**Booking Timestamp:** {row['booking_timestamp']}")
-    st.write(f"**Current Vehicle:** {row['current_vehicle'] if row['current_vehicle'] else 'N/A'}")
-    st.write(f"**Time Frame:** {row['time_frame']}")
-    st.markdown("---")
+                st.write(f"**Email:** {row['email']}")
+                st.write(f"**Location:** {row['location']}")
+                st.write(f"**Booking Date:** {row['booking_date']}")
+                st.write(f"**Booking Timestamp:** {row['booking_timestamp']}")
+                st.write(f"**Current Vehicle:** {row['current_vehicle'] if row['current_vehicle'] else 'N/A'}")
+                st.write(f"**Time Frame:** {row['time_frame']}")
+                st.markdown("---")
 
-    # keep your existing form exactly as-is, just nested here
-    with st.form(key=f"update_form_{row['request_id']}"):
-        col1, col2 = st.columns(2)
-        with col1:
-            selected_action = st.selectbox(
-                "Action Status",
-                options=available_actions,
-                index=available_actions.index(current_action) if current_action in available_actions else 0,
-                key=f"action_status_{row['request_id']}"
-            )
-        with col2:
-            st.markdown(
-                f"<div style='text-align: right;'>**Current Lead Score:** "
-                f"{current_lead_score_text} ({current_numeric_lead_score} points)</div>",
-                unsafe_allow_html=True
-            )
+                with st.form(key=f"update_form_{row['request_id']}"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        selected_action = st.selectbox(
+                            "Action Status",
+                            options=available_actions,
+                            index=available_actions.index(current_action) if current_action in available_actions else 0,
+                            key=f"action_status_{row['request_id']}",
+                        )
+                with col2:
+                    st.markdown(
+                        f"<div style='text-align: right;'>**Current Lead Score:** "
+                        f"{current_lead_score_text} ({current_numeric_lead_score} points)</div>",
+                        unsafe_allow_html=True,
+                    )
 
-        is_sales_notes_editable = (selected_action == 'Follow Up Required')
-        new_sales_notes = st.text_area(
-            "Sales Notes",
-            value=row['sales_notes'] if row['sales_notes'] else "",
-            key=f"sales_notes_{row['request_id']}",
-            help="Add notes for follow-up, customer concerns, or other relevant details.",
-            disabled=not is_sales_notes_editable
-        )
+                is_sales_notes_editable = (selected_action == "Follow Up Required")
+                new_sales_notes = st.text_area(
+                    "Sales Notes",
+                    value=row["sales_notes"] if row["sales_notes"] else "",
+                    key=f"sales_notes_{row['request_id']}",
+                    help="Add notes for follow-up, customer concerns, or other relevant details.",
+                    disabled=not is_sales_notes_editable,
+                ) 
 
-        col_buttons_form = st.columns([1, 1])
-        with col_buttons_form[0]:
-            save_button = st.form_submit_button("Save Updates")
-        draft_email_button = False
-        if selected_action == 'Follow Up Required':
-            with col_buttons_form[1]:
-                draft_email_button = st.form_submit_button("Draft Follow-up Email")
+                cols_form_btns = st.columns([1, 1])
+                with cols_form_btns[0]:
+                    save_button = st.form_submit_button("Save Updates")
+                draft_email_button = False
+                if selected_action == "Follow Up Required":
+                    with cols_form_btns[1]:
+                        draft_email_button = st.form_submit_button("Draft Follow-up Email")
 
-# -------------------- RIGHT (AI Summary rail) --------------------
-with col_rail:
-    st.markdown("### AI Summary")
-    insight = insights_map.get(row["request_id"])
-    if not insight:
-        st.info("No recent engagement yet. Summary will appear after the first reply or interaction.")
-    else:
-        counters = insight.get("engagement_counters") or {}
-        if isinstance(counters, str):
-            try:
-                counters = json.loads(counters)
-            except Exception:
-                counters = {}
+    # -------------------- RIGHT (AI Summary rail) --------------------
+            with col_rail:
+                st.markdown("### AI Summary")
+                insight = insights_map.get(row["request_id"])
+                if not insight:
+                    st.info("No recent engagement yet. Summary will appear after the first reply or interaction.")
+                else:
+                    counters = insight.get("engagement_counters") or {}
+                    if isinstance(counters, str):
+                        try:
+                            counters = json.loads(counters)
+                        except Exception:
+                            counters = {}
 
-        def _c(d, *names):
-            for n in names:
-                v = d.get(n)
-                if v is not None:
-                    try:
-                        return int(v)
-                    except Exception:
-                        return v
-            return 0
+                    def _c(d, *names):
+                        for n in names:
+                            v = d.get(n)
+                            if v is not None:
+                                try:
+                                    return int(v)
+                                except Exception:
+                                    return v
+                        return 0
 
-        replies_7d = _c(counters, "replies_7d", "replies")
-        opens_7d   = _c(counters, "opens_7d", "opens")
-        video_7d   = _c(counters, "video_7d", "videos")
-        pdf_7d     = _c(counters, "pdf_7d", "pdf_clicks")
+                    replies_7d = _c(counters, "replies_7d", "replies")
+                    opens_7d   = _c(counters, "opens_7d", "opens")
+                    video_7d   = _c(counters, "video_7d", "videos")
+                    pdf_7d     = _c(counters, "pdf_7d", "pdf_clicks")
 
-        st.markdown(
-            f"""
-            <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin:.25rem 0 .75rem 0;">
-              <span style="border:1px solid #e7e7e7;border-radius:9999px;padding:.15rem .6rem;">Replies (7d): <b>{replies_7d}</b></span>
-              <span style="border:1px solid #e7e7e7;border-radius:9999px;padding:.15rem .6rem;">Opens (7d): <b>{opens_7d}</b></span>
-              <span style="border:1px solid #e7e7e7;border-radius:9999px;padding:.15rem .6rem;">Video (7d): <b>{video_7d}</b></span>
-              <span style="border:1px solid #e7e7e7;border-radius:9999px;padding:.15rem .6rem;">PDF (7d): <b>{pdf_7d}</b></span>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+                    st.markdown(
+                        f"""
+                        <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin:.25rem 0 .75rem 0;">
+                          <span style="border:1px solid #e7e7e7;border-radius:9999px;padding:.15rem .6rem;">Replies (7d): <b>{replies_7d}</b></span>
+                          <span style="border:1px solid #e7e7e7;border-radius:9999px;padding:.15rem .6rem;">Opens (7d): <b>{opens_7d}</b></span>
+                          <span style="border:1px solid #e7e7e7;border-radius:9999px;padding:.15rem .6rem;">Video (7d): <b>{video_7d}</b></span>
+                          <span style="border:1px solid #e7e7e7;border-radius:9999px;padding:.15rem .6rem;">PDF (7d): <b>{pdf_7d}</b></span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
-        summary_text = (insight.get("rolling_summary") or "").strip()
-        if summary_text:
-            with st.expander("Show rolling summary", expanded=True):
-                st.write(summary_text)
-        else:
-            st.caption("No summary text yet.")
+                    summary_text = (insight.get("rolling_summary") or "").strip()
+                    if not summary_text:
+                        st.caption("No summary text yet.")
+                    else:
+                        with st.expander("Show rolling summary", expanded=False):
+                            st.write(summary_text)
 
-        ts = insight.get("updated_at") or insight.get("last_engaged_at")
-        if ts:
-            st.caption(f"Updated: {ts}")
-            
+                    updated_at = insight.get("updated_at")
+                    if updated_at:
+                        st.caption(f"Updated: {updated_at}")          
 
             # --- START AI BUTTONS OUTSIDE THE FORM (Manual Triggers to Local Dashboard Logic) ---
             # These buttons are not tied to the form submission,
@@ -1214,8 +1224,5 @@ with col_rail:
                 st.subheader("AI-Generated Talking Points:")
                 st.markdown(st.session_state[f"call_talking_points_{row['request_id']}"])
                 st.markdown("---")
-
-            else:
-                st.info("No test drive bookings to display yet. Submit a booking from your frontend!")
-
+           
 st.markdown("---")
