@@ -1215,7 +1215,7 @@ with col_rail:
                 st.markdown(st.session_state[f"call_talking_points_{row['request_id']}"])
                 st.markdown("---")
 
-else:
-    st.info("No test drive bookings to display yet. Submit a booking from your frontend!")
+            else:
+                st.info("No test drive bookings to display yet. Submit a booking from your frontend!")
 
 st.markdown("---")
