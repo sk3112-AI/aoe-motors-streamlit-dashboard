@@ -968,15 +968,15 @@ else:
                 st.write(f"**Time Frame:** {row['time_frame']}")
                 st.markdown("---")
 
-                with st.form(key=f"update_form_{row['request_id']}"):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        selected_action = st.selectbox(
-                            "Action Status",
-                            options=available_actions,
-                            index=available_actions.index(current_action) if current_action in available_actions else 0,
-                            key=f"action_status_{row['request_id']}",
-                        )
+            with st.form(key=f"update_form_{row['request_id']}"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    selected_action = st.selectbox(
+                        "Action Status",
+                        options=available_actions,
+                        index=available_actions.index(current_action) if current_action in available_actions else 0,
+                        key=f"action_status_{row['request_id']}",
+                    )
                 with col2:
                     st.markdown(
                         f"<div style='text-align: right;'>**Current Lead Score:** "
@@ -993,13 +993,25 @@ else:
                     disabled=not is_sales_notes_editable,
                 ) 
 
-                cols_form_btns = st.columns([1, 1])
-                with cols_form_btns[0]:
+                b1, b2 = st.columns(2)
+                with b1:
                     save_button = st.form_submit_button("Save Updates")
-                draft_email_button = False
-                if selected_action == "Follow Up Required":
-                    with cols_form_btns[1]:
-                        draft_email_button = st.form_submit_button("Draft Follow-up Email")
+                with b2:
+                # Only enable the second button when Follow Up is selected
+                    draft_email_button = (
+                         st.form_submit_button("Draft Follow-up Email")
+                         if selected_action == "Follow Up Required" else False
+                     )
+
+                if save_button:
+                    update_booking_field(row["request_id"], "action_status", selected_action)
+                    update_booking_field(row["request_id"], "sales_notes", new_sales_notes)
+                    st.toast("Saved updates", icon="✅")
+
+                if draft_email_button:
+                # Your draft-email logic here (compose, modal, etc.)
+                 st.toast("Drafting follow-up email…", icon="✉️")
+ 
 
     # -------------------- RIGHT (AI Summary rail) --------------------
             with col_rail:
