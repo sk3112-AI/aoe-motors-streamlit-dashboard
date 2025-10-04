@@ -873,41 +873,47 @@ else:
             st.rerun()
 
     # --- Text-to-Query Section (NOW CALLS AGENT SERVICE) ---
-    st.subheader("Analytics - Ask a Question! 🤖")
-    query_text = st.text_input(
-        "Type your question (e.g., 'total leads today', 'hot leads last week', 'total conversions', 'leads lost'):",
-        key="nlq_query_input"
+st.subheader("Analytics - Ask a Question! 😄")
+st.caption("Type queries like 'total leads', 'hot leads', 'converted leads'.")
+
+with st.form("analytics_form"):
+    q = st.text_input(
+        "Your question",
+        value=st.session_state.analytics_last_query,
+        placeholder="e.g., total leads, hot leads, converted leads",
     )
-    if query_text:
-        if AUTOMOTIVE_AGENT_SERVICE_URL:
-            st.session_state.info_message = "Querying analytics agent..."
-            try:
-                # Make API call to the new agent service for analytics
-                response = requests.post(
-                    f"{AUTOMOTIVE_AGENT_SERVICE_URL}/analyze-query",
-                    json={
-                        "query_text": query_text,
-                        "selected_location": selected_location,
-                        "start_date": start_date.isoformat(), # Pass date as ISO string
-                        "end_date": end_date.isoformat()    # Pass date as ISO string
-                    },
-                    timeout=60 # Add a timeout
-                )
-                response.raise_for_status() # Raise an exception for HTTP errors (4xx or 5xx)
-                result = response.json()
-                result_message = result.get("result_message", "No result message from analytics agent.")
-                st.markdown(result_message)
-                st.session_state.info_message = None # Clear info message
-            except requests.exceptions.Timeout:
-                st.session_state.error_message = "Analytics query timed out. Please try again."
-            except requests.exceptions.RequestException as e:
-                st.session_state.error_message = f"Error communicating with analytics agent: {e}"
-            except json.JSONDecodeError:
-                st.session_state.error_message = "Received invalid JSON from analytics agent."
-            st.rerun() # Rerun to display messages or results
+    ask = st.form_submit_button("Ask")
+
+if ask:
+    # Use your existing sidebar-picked dates; ensure they are date objects
+    # Example variable names - reuse whatever you already have:
+    # start_date_filter, end_date_filter
+    payload = {
+        "query_text": q,
+        "start_date": start_date_filter.strftime("%Y-%m-%d"),
+        "end_date": end_date_filter.strftime("%Y-%m-%d"),
+        # "selected_location": None  # optional; ignored by the agent now
+    }
+    try:
+        if not AUTOMOTIVE_AGENT_SERVICE_URL:
+            st.warning("Analytics service URL not configured.")
         else:
-            st.warning("Analytics service URL not configured. Please set AUTOMOTIVE_AGENT_SERVICE_URL.")
-    st.markdown("---")
+            r = requests.post(
+                f"{AUTOMOTIVE_AGENT_SERVICE_URL}/analyze-query",
+                json=payload,
+                timeout=15,
+            )
+            r.raise_for_status()
+            result = r.json().get("result_message", "No result.")
+            st.session_state.analytics_last_query = q
+            st.session_state.analytics_last_result = result
+    except Exception as ex:
+        st.session_state.analytics_last_result = f"⚠️ Analytics error: {ex}"
+
+# Single source of truth: render last result once
+if st.session_state.analytics_last_result:
+    st.markdown(st.session_state.analytics_last_result, unsafe_allow_html=True)
+
 
     for index, row in df.iterrows():
         current_action = row['action_status']
