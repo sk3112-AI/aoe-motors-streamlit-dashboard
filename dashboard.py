@@ -949,8 +949,8 @@ for index, row in df.iterrows():
             score_trend_indicator = " 🔥📈" # Moved to Hot
         elif current_lead_score_text == "Warm":
             score_trend_indicator = " 🟡📈" # Moved to Warm (from Cold)
-        elif current_numeric_lead_score < initial_lead_score:
-            score_trend_indicator = " ❄️📉" # Dropped in score
+    elif current_numeric_lead_score < initial_lead_score:
+        score_trend_indicator = " ❄️📉" # Dropped in score
         
         # Add a subtle indicator for leads that were initially cold/warm and became hot/warm
         # This part assumes initial_lead_score is correctly inferred from time_frame
@@ -985,49 +985,49 @@ for index, row in df.iterrows():
             st.write(f"**Time Frame:** {row['time_frame']}")
             st.markdown("---")
 
-        with st.form(key=f"update_form_{row['request_id']}"):
-            col1, col2 = st.columns(2)
-            with col1:
-                selected_action = st.selectbox(
-                    "Action Status",
-                    options=available_actions,
-                    index=available_actions.index(current_action) if current_action in available_actions else 0,
-                    key=f"action_status_{row['request_id']}",
-                )
-            with col2:
-                st.markdown(
-                    f"<div style='text-align: right;'>**Current Lead Score:** "
-                    f"{current_lead_score_text} ({current_numeric_lead_score} points)</div>",
-                    unsafe_allow_html=True,
-                )
+            with st.form(key=f"update_form_{row['request_id']}"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    selected_action = st.selectbox(
+                        "Action Status",
+                        options=available_actions,
+                        index=available_actions.index(current_action) if current_action in available_actions else 0,
+                        key=f"action_status_{row['request_id']}",
+                    )
+                with col2:
+                    st.markdown(
+                        f"<div style='text-align: right;'>**Current Lead Score:** "
+                        f"{current_lead_score_text} ({current_numeric_lead_score} points)</div>",
+                        unsafe_allow_html=True,
+                    )
 
-            is_sales_notes_editable = (selected_action == "Follow Up Required")
-            new_sales_notes = st.text_area(
-                "Sales Notes",
-                value=row["sales_notes"] if row["sales_notes"] else "",
-                key=f"sales_notes_{row['request_id']}",
-                help="Add notes for follow-up, customer concerns, or other relevant details.",
-                disabled=not is_sales_notes_editable,
-            ) 
+                is_sales_notes_editable = (selected_action == "Follow Up Required")
+                new_sales_notes = st.text_area(
+                    "Sales Notes",
+                    value=row["sales_notes"] if row["sales_notes"] else "",
+                    key=f"sales_notes_{row['request_id']}",
+                    help="Add notes for follow-up, customer concerns, or other relevant details.",
+                    disabled=not is_sales_notes_editable,
+                ) 
 
-            b1, b2 = st.columns(2)
-            with b1:
-                save_button = st.form_submit_button("Save Updates")
-            with b2:
+                b1, b2 = st.columns(2)
+                    with b1:
+                    save_button = st.form_submit_button("Save Updates")
+                with b2:
             # Only enable the second button when Follow Up is selected
                 draft_email_button = (
                     st.form_submit_button("Draft Follow-up Email")
                     if selected_action == "Follow Up Required" else False
                 )
 
-            if save_button:
-                update_booking_field(row["request_id"], "action_status", selected_action)
-                update_booking_field(row["request_id"], "sales_notes", new_sales_notes)
-                st.toast("Saved updates", icon="✅")
+                if save_button:
+                    update_booking_field(row["request_id"], "action_status", selected_action)
+                    update_booking_field(row["request_id"], "sales_notes", new_sales_notes)
+                    st.toast("Saved updates", icon="✅")
 
-            if draft_email_button:
+                if draft_email_button:
                 # Your draft-email logic here (compose, modal, etc.)
-                st.toast("Drafting follow-up email…", icon="✉️")
+                    st.toast("Drafting follow-up email…", icon="✉️")
  
 
     # -------------------- RIGHT (AI Summary rail) --------------------
@@ -1138,7 +1138,7 @@ for index, row in df.iterrows():
                 st.session_state.expanded_lead_id = row['request_id'] 
                 st.rerun()
 
-        # EXISTING: Logic for drafting follow-up email (manual send) - triggered by draft_email_button from inside form
+            # EXISTING: Logic for drafting follow-up email (manual send) - triggered by draft_email_button from inside form
         if selected_action == 'Follow Up Required' and 'draft_email_button' in locals() and draft_email_button:
             if new_sales_notes.strip() == "":
                 st.warning("Sales notes are mandatory to draft a follow-up email.")
@@ -1151,7 +1151,7 @@ for index, row in df.iterrows():
                     st.session_state.info_message = None 
                 else:
                     notes_sentiment = analyze_sentiment(new_sales_notes)
-                        
+                    
                     vehicle_details = AOE_VEHICLE_DATA.get(row['vehicle'], {})
                     current_vehicle_brand_val = row['current_vehicle'].split(' ')[0] if row['current_vehicle'] else None
                         
@@ -1168,13 +1168,13 @@ for index, row in df.iterrows():
                         st.session_state[f"draft_body_{row['request_id']}"] = followup_body_markdown
                         st.session_state.expanded_lead_id = row['request_id']
                         st.session_state.info_message = None 
-                            st.rerun()
+                        st.rerun()
                         else:
-                            st.session_state.error_message = "Failed to draft email. Please check sales notes and try again."
-                            st.session_state.info_message = None 
-                    else:
-                        st.session_state.error_message = f"Vehicle details for {row['vehicle']} not found in hardcoded data. Cannot draft email."
+                        st.session_state.error_message = "Failed to draft email. Please check sales notes and try again."
                         st.session_state.info_message = None 
+                else:
+                    st.session_state.error_message = f"Vehicle details for {row['vehicle']} not found in hardcoded data. Cannot draft email."
+                    st.session_state.info_message = None 
 
         if selected_action == 'Follow Up Required' and f"draft_subject_{row['request_id']}" in st.session_state and f"draft_body_{row['request_id']}" in st.session_state:
             draft_subject = st.session_state[f"draft_subject_{row['request_id']}"]
