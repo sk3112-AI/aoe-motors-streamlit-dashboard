@@ -926,113 +926,108 @@ last = st.session_state.get("analytics_last_result", "")
 if last:
     st.markdown(last, unsafe_allow_html=True)
 
-# Single source of truth: render last result once
-if st.session_state.analytics_last_result:
-    st.markdown(st.session_state.analytics_last_result, unsafe_allow_html=True)
+for index, row in df.iterrows():
+    current_action = row['action_status']
+    current_numeric_lead_score = row.get('numeric_lead_score', 0)
+    current_lead_score_text = label_from_numeric(current_numeric_lead_score)
 
 
-    for index, row in df.iterrows():
-        current_action = row['action_status']
-        current_numeric_lead_score = row.get('numeric_lead_score', 0)
-        current_lead_score_text = label_from_numeric(current_numeric_lead_score)
-
-
-        # NEW: Logic for Lead Insights Agent Indicator
-        score_trend_indicator = ""
-        initial_numeric_score_map = {
-            "0-3-months": 10,
-            "3-6-months": 7,
-            "6-12-months": 5,
-            "exploring-now": 2
-        }
+    # NEW: Logic for Lead Insights Agent Indicator
+    score_trend_indicator = ""
+    initial_numeric_score_map = {
+        "0-3-months": 10,
+        "3-6-months": 7,
+        "6-12-months": 5,
+        "exploring-now": 2
+    }
         # Safely get initial score, default to current if timeframe is unexpected
         initial_lead_score = initial_numeric_score_map.get(row.get('time_frame'), current_numeric_lead_score) 
 
         # Only show indicator if there's a meaningful change and score is not zero
-        if current_numeric_lead_score > initial_lead_score and current_numeric_lead_score > 0:
-            if current_lead_score_text == "Hot":
-                score_trend_indicator = " 🔥📈" # Moved to Hot
-            elif current_lead_score_text == "Warm":
-                score_trend_indicator = " 🟡📈" # Moved to Warm (from Cold)
+    if current_numeric_lead_score > initial_lead_score and current_numeric_lead_score > 0:
+        if current_lead_score_text == "Hot":
+            score_trend_indicator = " 🔥📈" # Moved to Hot
+        elif current_lead_score_text == "Warm":
+            score_trend_indicator = " 🟡📈" # Moved to Warm (from Cold)
         elif current_numeric_lead_score < initial_lead_score:
             score_trend_indicator = " ❄️📉" # Dropped in score
         
         # Add a subtle indicator for leads that were initially cold/warm and became hot/warm
         # This part assumes initial_lead_score is correctly inferred from time_frame
         
-        available_actions = ACTION_STATUS_MAP.get(current_lead_score_text, ACTION_STATUS_MAP["New"])
+    available_actions = ACTION_STATUS_MAP.get(current_lead_score_text, ACTION_STATUS_MAP["New"])
 
-        expander_key = f"expander_{row['request_id']}"
-        is_expanded = (st.session_state.expanded_lead_id == row['request_id'])
+    expander_key = f"expander_{row['request_id']}"
+    is_expanded = (st.session_state.expanded_lead_id == row['request_id'])
 
-        with st.expander(
-            f"**{row['full_name']}** - {row['vehicle']} - Status: **{current_action}** "
-            f"(Score: {current_lead_score_text} - {current_numeric_lead_score} points){score_trend_indicator}",
-            expanded=is_expanded,
-        ):
-            # Two-column layout *inside* the expander
-            col_main, col_rail = st.columns([3, 2], gap="large")
+    with st.expander(
+        f"**{row['full_name']}** - {row['vehicle']} - Status: **{current_action}** "
+        f"(Score: {current_lead_score_text} - {current_numeric_lead_score} points){score_trend_indicator}",
+        expanded=is_expanded,
+    ):
+        # Two-column layout *inside* the expander
+        col_main, col_rail = st.columns([3, 2], gap="large")
 
     # -------------------- LEFT (lead details + form) --------------------
-            with col_main:
-                st.button(
-                    "Toggle Details",
-                    key=f"toggle_{row['request_id']}",
-                    on_click=set_expanded_lead,
-                    args=(row['request_id'],),
+        with col_main:
+            st.button(
+                "Toggle Details",
+                key=f"toggle_{row['request_id']}",
+                on_click=set_expanded_lead,
+                args=(row['request_id'],),
+            )
+
+            st.write(f"**Email:** {row['email']}")
+            st.write(f"**Location:** {row['location']}")
+            st.write(f"**Booking Date:** {row['booking_date']}")
+            st.write(f"**Booking Timestamp:** {row['booking_timestamp']}")
+            st.write(f"**Current Vehicle:** {row['current_vehicle'] if row['current_vehicle'] else 'N/A'}")
+            st.write(f"**Time Frame:** {row['time_frame']}")
+            st.markdown("---")
+
+        with st.form(key=f"update_form_{row['request_id']}"):
+            col1, col2 = st.columns(2)
+            with col1:
+                selected_action = st.selectbox(
+                    "Action Status",
+                    options=available_actions,
+                    index=available_actions.index(current_action) if current_action in available_actions else 0,
+                    key=f"action_status_{row['request_id']}",
+                )
+            with col2:
+                st.markdown(
+                    f"<div style='text-align: right;'>**Current Lead Score:** "
+                    f"{current_lead_score_text} ({current_numeric_lead_score} points)</div>",
+                    unsafe_allow_html=True,
                 )
 
-                st.write(f"**Email:** {row['email']}")
-                st.write(f"**Location:** {row['location']}")
-                st.write(f"**Booking Date:** {row['booking_date']}")
-                st.write(f"**Booking Timestamp:** {row['booking_timestamp']}")
-                st.write(f"**Current Vehicle:** {row['current_vehicle'] if row['current_vehicle'] else 'N/A'}")
-                st.write(f"**Time Frame:** {row['time_frame']}")
-                st.markdown("---")
+            is_sales_notes_editable = (selected_action == "Follow Up Required")
+            new_sales_notes = st.text_area(
+                "Sales Notes",
+                value=row["sales_notes"] if row["sales_notes"] else "",
+                key=f"sales_notes_{row['request_id']}",
+                help="Add notes for follow-up, customer concerns, or other relevant details.",
+                disabled=not is_sales_notes_editable,
+            ) 
 
-            with st.form(key=f"update_form_{row['request_id']}"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    selected_action = st.selectbox(
-                        "Action Status",
-                        options=available_actions,
-                        index=available_actions.index(current_action) if current_action in available_actions else 0,
-                        key=f"action_status_{row['request_id']}",
-                    )
-                with col2:
-                    st.markdown(
-                        f"<div style='text-align: right;'>**Current Lead Score:** "
-                        f"{current_lead_score_text} ({current_numeric_lead_score} points)</div>",
-                        unsafe_allow_html=True,
-                    )
+            b1, b2 = st.columns(2)
+            with b1:
+                save_button = st.form_submit_button("Save Updates")
+            with b2:
+            # Only enable the second button when Follow Up is selected
+                draft_email_button = (
+                    st.form_submit_button("Draft Follow-up Email")
+                    if selected_action == "Follow Up Required" else False
+                )
 
-                is_sales_notes_editable = (selected_action == "Follow Up Required")
-                new_sales_notes = st.text_area(
-                    "Sales Notes",
-                    value=row["sales_notes"] if row["sales_notes"] else "",
-                    key=f"sales_notes_{row['request_id']}",
-                    help="Add notes for follow-up, customer concerns, or other relevant details.",
-                    disabled=not is_sales_notes_editable,
-                ) 
+            if save_button:
+                update_booking_field(row["request_id"], "action_status", selected_action)
+                update_booking_field(row["request_id"], "sales_notes", new_sales_notes)
+                st.toast("Saved updates", icon="✅")
 
-                b1, b2 = st.columns(2)
-                with b1:
-                    save_button = st.form_submit_button("Save Updates")
-                with b2:
-                # Only enable the second button when Follow Up is selected
-                    draft_email_button = (
-                         st.form_submit_button("Draft Follow-up Email")
-                         if selected_action == "Follow Up Required" else False
-                     )
-
-                if save_button:
-                    update_booking_field(row["request_id"], "action_status", selected_action)
-                    update_booking_field(row["request_id"], "sales_notes", new_sales_notes)
-                    st.toast("Saved updates", icon="✅")
-
-                if draft_email_button:
+            if draft_email_button:
                 # Your draft-email logic here (compose, modal, etc.)
-                 st.toast("Drafting follow-up email…", icon="✉️")
+                st.toast("Drafting follow-up email…", icon="✉️")
  
 
     # -------------------- RIGHT (AI Summary rail) --------------------
@@ -1116,6 +1111,7 @@ if st.session_state.analytics_last_result:
                         st.session_state[talking_points_button_clicked_key] = True # Set clicked state for this specific row
                         st.session_state.expanded_lead_id = row['request_id'] # Keep expanded
                         st.rerun() # Immediately rerun
+            
             # --- END AI BUTTONS OUTSIDE THE FORM ---
 
 
