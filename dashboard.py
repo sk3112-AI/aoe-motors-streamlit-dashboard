@@ -1015,10 +1015,10 @@ for index, row in df.iterrows():
                     save_button = st.form_submit_button("Save Updates")
                 with b2:
             # Only enable the second button when Follow Up is selected
-                draft_email_button = (
-                    st.form_submit_button("Draft Follow-up Email")
-                    if selected_action == "Follow Up Required" else False
-                )
+                    draft_email_button = (
+                        st.form_submit_button("Draft Follow-up Email")
+                        if selected_action == "Follow Up Required" else False
+                    )
 
                 if save_button:
                     update_booking_field(row["request_id"], "action_status", selected_action)
