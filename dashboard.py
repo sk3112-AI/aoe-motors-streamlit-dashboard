@@ -1009,9 +1009,9 @@ for index, row in df.iterrows():
                     help="Add notes for follow-up, customer concerns, or other relevant details.",
                     disabled=not is_sales_notes_editable,
                 ) 
-
+            # Fix Inendation      
                 b1, b2 = st.columns(2)
-                    with b1:
+                with b1:
                     save_button = st.form_submit_button("Save Updates")
                 with b2:
             # Only enable the second button when Follow Up is selected
