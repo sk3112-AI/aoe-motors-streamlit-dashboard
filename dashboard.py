@@ -1169,7 +1169,7 @@ for index, row in df.iterrows():
                         st.session_state.expanded_lead_id = row['request_id']
                         st.session_state.info_message = None 
                         st.rerun()
-                        else:
+                    else:
                         st.session_state.error_message = "Failed to draft email. Please check sales notes and try again."
                         st.session_state.info_message = None 
                 else:
