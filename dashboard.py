@@ -1138,7 +1138,7 @@ for index, row in df.iterrows():
                 st.session_state.expanded_lead_id = row['request_id'] 
                 st.rerun()
 
-            # EXISTING: Logic for drafting follow-up email (manual send) - triggered by draft_email_button from inside form
+        # EXISTING: Logic for drafting follow-up email (manual send) - triggered by draft_email_button from inside form
         if selected_action == 'Follow Up Required' and 'draft_email_button' in locals() and draft_email_button:
             if new_sales_notes.strip() == "":
                 st.warning("Sales notes are mandatory to draft a follow-up email.")
@@ -1228,28 +1228,28 @@ for index, row in df.iterrows():
             st.markdown("---")
 
 
-            # NEW: Logic for Talking Points (triggered by button_clicked from outside form)
-            if st.session_state.get(talking_points_button_clicked_key, False): # Check session state for click
-                st.session_state.info_message = "Generating talking points..."
-                talking_points_details = {
-                    "customer_name": row['full_name'],
-                    "vehicle_name": row['vehicle'],
-                    "current_vehicle": row['current_vehicle'],
-                    "lead_score_text": current_lead_score_text,
-                    "numeric_lead_score": current_numeric_lead_score,
-                    "sales_notes": new_sales_notes # Use the latest notes
-                }
-                generated_points = generate_call_talking_points_llm(talking_points_details, AOE_VEHICLE_DATA.get(row['vehicle'], {}))
-                st.session_state[f"call_talking_points_{row['request_id']}"] = generated_points
-                st.session_state.expanded_lead_id = row['request_id']
-                st.session_state.info_message = None
-                st.session_state[talking_points_button_clicked_key] = False # Reset click state
-                st.rerun()
+        # NEW: Logic for Talking Points (triggered by button_clicked from outside form)
+        if st.session_state.get(talking_points_button_clicked_key, False): # Check session state for click
+            st.session_state.info_message = "Generating talking points..."
+            talking_points_details = {
+                "customer_name": row['full_name'],
+                "vehicle_name": row['vehicle'],
+                "current_vehicle": row['current_vehicle'],
+                "lead_score_text": current_lead_score_text,
+                "numeric_lead_score": current_numeric_lead_score,
+                "sales_notes": new_sales_notes # Use the latest notes
+            }
+            generated_points = generate_call_talking_points_llm(talking_points_details, AOE_VEHICLE_DATA.get(row['vehicle'], {}))
+            st.session_state[f"call_talking_points_{row['request_id']}"] = generated_points
+            st.session_state.expanded_lead_id = row['request_id']
+            st.session_state.info_message = None
+            st.session_state[talking_points_button_clicked_key] = False # Reset click state
+            st.rerun()
             
             # Display talking points if available in session state
-            if f"call_talking_points_{row['request_id']}" in st.session_state:
-                st.subheader("AI-Generated Talking Points:")
-                st.markdown(st.session_state[f"call_talking_points_{row['request_id']}"])
-                st.markdown("---")
+        if f"call_talking_points_{row['request_id']}" in st.session_state:
+            st.subheader("AI-Generated Talking Points:")
+            st.markdown(st.session_state[f"call_talking_points_{row['request_id']}"])
+            st.markdown("---")
            
 st.markdown("---")
