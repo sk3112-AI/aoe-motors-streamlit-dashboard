@@ -898,13 +898,11 @@ if ask:
     # Use your existing sidebar-picked dates; ensure they are date objects
     # Example variable names - reuse whatever you already have:
     # start_date_filter, end_date_filter
-    start_dt = st.session_state["sidebar_start_date"]
-    end_dt_exclusive = st.session_state["sidebar_end_date"]   
-    
+      
     payload = {
         "query_text": q,
-        "start_date": start_date_filter.strftime("%Y-%m-%d"),
-        "end_date": end_date_filter.strftime("%Y-%m-%d"),
+        "start_date": st.session_state["sidebar_start_date"].strftime("%Y-%m-%d"),
+        "end_date": st.session_state["sidebar_end_date"].strftime("%Y-%m-%d"),
         # "selected_location": None  # optional; ignored by the agent now
     }
     try:
