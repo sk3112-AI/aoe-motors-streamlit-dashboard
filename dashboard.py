@@ -872,14 +872,22 @@ else:
                     st.session_state.error_message = f"❌ Failed to call the agent service: {e}"
             st.rerun()
 
-    # --- Text-to-Query Section (NOW CALLS AGENT SERVICE) ---
+
+# --- Analytics session defaults (must exist before first read) ---
+if "analytics_last_query" not in st.session_state:
+    st.session_state["analytics_last_query"] = ""
+
+if "analytics_last_result" not in st.session_state:
+    st.session_state["analytics_last_result"] = ""
+
+# --- Text-to-Query Section (NOW CALLS AGENT SERVICE) ---
 st.subheader("Analytics - Ask a Question! 😄")
 st.caption("Type queries like 'total leads', 'hot leads', 'converted leads'.")
 
 with st.form("analytics_form"):
     q = st.text_input(
         "Your question",
-        value=st.session_state.analytics_last_query,
+        value=st.session_state.get("analytics_last_query", ""),
         placeholder="e.g., total leads, hot leads, converted leads",
     )
     ask = st.form_submit_button("Ask")
@@ -909,6 +917,11 @@ if ask:
             st.session_state.analytics_last_result = result
     except Exception as ex:
         st.session_state.analytics_last_result = f"⚠️ Analytics error: {ex}"
+
+# Show the last answer (single source of truth)
+last = st.session_state.get("analytics_last_result", "")
+if last:
+    st.markdown(last, unsafe_allow_html=True)
 
 # Single source of truth: render last result once
 if st.session_state.analytics_last_result:
