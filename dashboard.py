@@ -885,6 +885,7 @@ if "analytics_last_result" not in st.session_state:
 # --- Text-to-Query Section (NOW CALLS AGENT SERVICE) ---
 st.subheader("Analytics - Ask a Question! 😄")
 st.caption("Type queries like 'total leads', 'hot leads', 'converted leads'.")
+st.write("**Try:**  `lead score distribution` · `trend conversions` · `leads by status` · `who should I call`")
 
 with st.form("analytics_form"):
     q = st.text_input(
@@ -915,16 +916,59 @@ if ask:
                 timeout=15,
             )
             r.raise_for_status()
-            result = r.json().get("result_message", "No result.")
-            st.session_state.analytics_last_query = q
-            st.session_state.analytics_last_result = result
+            resp_json = r.json()
+            st.session_state["analytics_last_query"]  = q
+            st.session_state["analytics_last_result"] = resp_json.get("result_message", "No result.")
+            st.session_state["analytics_last_type"]   = resp_json.get("result_type", "TEXT")
+            st.session_state["analytics_last_payload"]= resp_json.get("payload", None)
     except Exception as ex:
         st.session_state.analytics_last_result = f"⚠️ Analytics error: {ex}"
+        st.session_state["analytics_last_type"]    = "TEXT"
+        st.session_state["analytics_last_payload"] = None
 
 # Show the last answer (single source of truth)
 last = st.session_state.get("analytics_last_result", "")
 if last:
     st.markdown(last, unsafe_allow_html=True)
+
+# Render payload by result_type (keep this BEFORE the lead list)
+rtype   = st.session_state.get("analytics_last_type")
+payload = st.session_state.get("analytics_last_payload")
+
+if rtype == "CHART" and isinstance(payload, dict):
+    kind = payload.get("kind")
+    if kind == "bar":
+        labels = payload.get("labels", [])
+        values = payload.get("values", [])
+        if labels and values and len(labels)==len(values):
+            chart_df = pd.DataFrame({"Label": labels, "Count": values}).set_index("Label")
+            st.bar_chart(chart_df["Count"])
+    elif kind == "line":
+        x = payload.get("x", [])
+        series = payload.get("series", {})
+        if x and series:
+            chart_df = pd.DataFrame(series, index=pd.to_datetime(x, errors="coerce"))
+            st.line_chart(chart_df)
+
+elif rtype == "RANK" and isinstance(payload, dict):
+    cols = payload.get("columns", [])
+    rows = payload.get("rows", [])
+    if rows:
+        st.markdown("#### ☎️ Recommended call list")
+        # Show 'Call Customer (AI)' first if present, then the rest (already scored)
+        df_rank = pd.DataFrame(rows)
+        call_ai = df_rank[df_rank["Status"]=="Call Customer (AI)"]
+        others  = df_rank[df_rank["Status"]!="Call Customer (AI)"]
+       
+        if not call_ai.empty:
+            st.caption("Top priority (explicit): Call Customer (AI)")
+            st.dataframe(call_ai[show_cols] if show_cols else call_ai, use_container_width=True, hide_index=True)
+
+        st.caption("Next best candidates")
+        if not others.empty:
+            st.dataframe(others[show_cols] if show_cols else others, use_container_width=True, hide_index=True)
+
+# else: COUNT/TEXT are already shown via the banner
 
 for index, row in df.iterrows():
     current_action = row['action_status']
