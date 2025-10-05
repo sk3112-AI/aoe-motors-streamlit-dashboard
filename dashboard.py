@@ -887,16 +887,17 @@ st.subheader("Analytics - Ask a Question! 😄")
 st.caption("Type queries like 'total leads', 'hot leads', 'converted leads'.")
 st.write("**Try:**  `lead score distribution` · `trend conversions` · `leads by status` · `who should I call`")
 
-with st.form("analytics_form"):
+with st.form("analytics_form",clear_on_submit=True):
     q = st.text_input(
         "Your question",
-        value=st.session_state.get("analytics_last_query", ""),
+        key="analytics_query",     
         placeholder="e.g., total leads, hot leads, converted leads",
     )
     ask = st.form_submit_button("Ask")
 
 if ask:
     # Clear previous visuals immediately so they don't linger
+    q = (st.session_state.get("analytics_query", "") or "").strip()
     st.session_state["analytics_last_query"]   = q
     st.session_state["analytics_last_result"]  = "⏳ Running analytics…"
     st.session_state["analytics_last_type"]    = None
@@ -905,30 +906,37 @@ if ask:
     # Example variable names - reuse whatever you already have:
     # start_date_filter, end_date_filter
      
-    payload = {
-        "query_text": q,
-        "start_date": st.session_state["sidebar_start_date"].strftime("%Y-%m-%d"),
-        "end_date": st.session_state["sidebar_end_date"].strftime("%Y-%m-%d"),
-        # "selected_location": None  # optional; ignored by the agent now
-    }
-    try:
-        if not AUTOMOTIVE_AGENT_SERVICE_URL:
-            st.warning("Analytics service URL not configured.")
-        else:
-            r = requests.post(
-                f"{AUTOMOTIVE_AGENT_SERVICE_URL}/analyze-query",
-                json=payload,
-                timeout=15,
-            )
-            r.raise_for_status()
-            resp_json = r.json()
-            st.session_state["analytics_last_result"] = resp_json.get("result_message", "No result.")
-            st.session_state["analytics_last_type"]   = resp_json.get("result_type", "TEXT")
-            st.session_state["analytics_last_payload"]= resp_json.get("payload", None)
-    except Exception as ex:
-        st.session_state.analytics_last_result = f"⚠️ Analytics error: {ex}"
+
+    if not q:
+        st.session_state["analytics_last_result"] = (
+            "🙅 Not relevant. Try: **'total leads'**, **'hot leads'**, "
+            "**'trend conversions'**, **'lead score distribution'**, or **'who should I call'**."
+        )
         st.session_state["analytics_last_type"]    = "TEXT"
         st.session_state["analytics_last_payload"] = None
+    else:
+        try:
+            if not AUTOMOTIVE_AGENT_SERVICE_URL:
+                st.warning("Analytics service URL not configured.")
+            else:
+                r = requests.post(
+                    f"{AUTOMOTIVE_AGENT_SERVICE_URL}/analyze-query",
+                    json={
+                        "query_text": q,
+                        "start_date": st.session_state["sidebar_start_date"].strftime("%Y-%m-%d"),
+                        "end_date":   st.session_state["sidebar_end_date"].strftime("%Y-%m-%d"),
+                    },
+                    timeout=15,
+                )
+                r.raise_for_status()
+                resp_json = r.json()
+                st.session_state["analytics_last_result"]   = resp_json.get("result_message", "No result.")
+                st.session_state["analytics_last_type"]     = resp_json.get("result_type", "TEXT")
+                st.session_state["analytics_last_payload"]  = resp_json.get("payload", None)
+        except Exception as ex:
+            st.session_state["analytics_last_result"]  = f"⚠️ Analytics error: {ex}"
+            st.session_state["analytics_last_type"]    = "TEXT"
+            st.session_state["analytics_last_payload"] = None
 
 # Show the last answer (single source of truth)
 last = st.session_state.get("analytics_last_result", "")
