@@ -897,12 +897,14 @@ with st.form("analytics_form"):
 
 if ask:
     # Clear previous visuals immediately so they don't linger
+    st.session_state["analytics_last_query"]   = q
+    st.session_state["analytics_last_result"]  = "⏳ Running analytics…"
     st.session_state["analytics_last_type"]    = None
     st.session_state["analytics_last_payload"] = None
     # Use your existing sidebar-picked dates; ensure they are date objects
     # Example variable names - reuse whatever you already have:
     # start_date_filter, end_date_filter
-      
+     
     payload = {
         "query_text": q,
         "start_date": st.session_state["sidebar_start_date"].strftime("%Y-%m-%d"),
@@ -920,7 +922,6 @@ if ask:
             )
             r.raise_for_status()
             resp_json = r.json()
-            st.session_state["analytics_last_query"]  = q
             st.session_state["analytics_last_result"] = resp_json.get("result_message", "No result.")
             st.session_state["analytics_last_type"]   = resp_json.get("result_type", "TEXT")
             st.session_state["analytics_last_payload"]= resp_json.get("payload", None)
