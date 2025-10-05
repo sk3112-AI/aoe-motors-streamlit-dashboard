@@ -951,22 +951,37 @@ if rtype == "CHART" and isinstance(payload, dict):
             st.line_chart(chart_df)
 
 elif rtype == "RANK" and isinstance(payload, dict):
-    cols = payload.get("columns", [])
-    rows = payload.get("rows", [])
+    rows = payload.get("rows") or []
+    cols = payload.get("columns") or []
     if rows:
         st.markdown("#### ☎️ Recommended call list")
-        # Show 'Call Customer (AI)' first if present, then the rest (already scored)
         df_rank = pd.DataFrame(rows)
-        call_ai = df_rank[df_rank["Status"]=="Call Customer (AI)"]
-        others  = df_rank[df_rank["Status"]!="Call Customer (AI)"]
-       
+
+        # Derive safe display columns once, upfront
+        default_order = ["Lead", "Vehicle", "Status", "LeadScore", "Reason"]
+        if not cols:
+            cols = default_order
+        # Intersect to avoid KeyErrors; drop columns we never show
+        drop_cols = {"Priority", "RequestID", "Booked"}
+        show_cols = [c for c in cols if c in df_rank.columns and c not in drop_cols]
+
+        # Safe "Status" handling even if column is missing
+        if "Status" in df_rank.columns:
+            status_series = df_rank["Status"]
+        else:
+            status_series = pd.Series([""] * len(df_rank), index=df_rank.index)
+
+        call_ai = df_rank[status_series == "Call Customer (AI)"]
+        others  = df_rank[status_series != "Call Customer (AI)"]
+
         if not call_ai.empty:
             st.caption("Top priority (explicit): Call Customer (AI)")
-            st.dataframe(call_ai[show_cols] if show_cols else call_ai, use_container_width=True, hide_index=True)
+            st.dataframe(call_ai[show_cols] if show_cols else call_ai,
+                         use_container_width=True, hide_index=True)
 
         st.caption("Next best candidates")
         if not others.empty:
-            st.dataframe(others[show_cols] if show_cols else others, use_container_width=True, hide_index=True)
+            st.dataframe(others[show_cols] if show_cols else others,use_container_width=True, hide_index=True)
 
 # else: COUNT/TEXT are already shown via the banner
 
