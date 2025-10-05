@@ -896,6 +896,9 @@ with st.form("analytics_form"):
     ask = st.form_submit_button("Ask")
 
 if ask:
+    # Clear previous visuals immediately so they don't linger
+    st.session_state["analytics_last_type"]    = None
+    st.session_state["analytics_last_payload"] = None
     # Use your existing sidebar-picked dates; ensure they are date objects
     # Example variable names - reuse whatever you already have:
     # start_date_filter, end_date_filter
@@ -949,7 +952,9 @@ if rtype == "CHART" and isinstance(payload, dict):
         if x and series:
             chart_df = pd.DataFrame(series, index=pd.to_datetime(x, errors="coerce"))
             st.line_chart(chart_df)
-
+        else:
+            st.info("No conversion or loss activity found in this period.")
+            
 elif rtype == "RANK" and isinstance(payload, dict):
     rows = payload.get("rows") or []
     cols = payload.get("columns") or []
@@ -984,7 +989,6 @@ elif rtype == "RANK" and isinstance(payload, dict):
             st.dataframe(others[show_cols] if show_cols else others,use_container_width=True, hide_index=True)
 
 # else: COUNT/TEXT are already shown via the banner
-
 for index, row in df.iterrows():
     current_action = row['action_status']
     current_numeric_lead_score = row.get('numeric_lead_score', 0)
